@@ -10,6 +10,31 @@ use std::collections::HashMap;
 const PARTS : u32 = 100;
 const K : u32 = 21;
 
+// Function that takes a DNA sequence as a string and returns reverse complement
+fn revcomp (seq : String) -> String {
+    let mut revcomp = String::new();
+    for c in seq.chars().rev() {
+        match c {
+            'A' => revcomp.push('T'),
+            'C' => revcomp.push('G'),
+            'G' => revcomp.push('C'),
+            'T' => revcomp.push('A'),
+            'N' => revcomp.push('N'),
+            _ => panic!("Invalid base: {}", c),
+        }
+    }
+    return revcomp;
+}
+
+fn kmer_revcomp (kmer : u64) -> u64 {
+    let mut revcomp = 0;
+    for i in 0..K {
+        let base = (kmer >> (2*i)) & 3;
+        revcomp = (revcomp << 2) | (3 - base);
+    }
+    return revcomp;
+}
+
 fn string2kmers (seq : String) -> Vec<u64> {
 
     // kmers are encoded as u64, with two bits per base
@@ -35,6 +60,7 @@ fn string2kmers (seq : String) -> Vec<u64> {
             n_valid += 1;
             if (n_valid >= K) {
                 kmers.push(frame & mask);
+                //kmers.push(kmer_revcomp(frame & mask));
             }
         } else if (base==4) {
             frame = 0;
@@ -90,11 +116,14 @@ fn main() {
 
 
     let start = std::time::Instant::now();
+    println!("Extracting kmers");
 
     let mut kmers : Vec<u64> = Vec::new();
     for seq in seqs {
         // Call string2kmers on each sequence and append the result to kmers
+        let seq_rc = revcomp(seq.clone());
         kmers.append(&mut string2kmers(seq));
+        kmers.append(&mut string2kmers(seq_rc));
     }
 
     println!("Total kmers: {}", kmers.len());
@@ -102,6 +131,22 @@ fn main() {
     let stop = std::time::Instant::now();
 
     println!("Time: {} ms", (stop - start).as_millis());
+
+    let start = std::time::Instant::now();
+    println!("Counting kmers");
+
+    let mut counts : HashMap<u64, u32> = HashMap::new();
+    for kmer in kmers {
+        let count = counts.entry(kmer).or_insert(0);
+        *count += 1;
+    }
+
+    let stop = std::time::Instant::now();
+
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    // print the number of unique kmers
+    println!("Unique kmers: {}", counts.len());
 
 
 }
