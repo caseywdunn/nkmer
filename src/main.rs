@@ -1,11 +1,8 @@
-extern crate needletail;
-use std::borrow::Cow;
-
-use needletail::{parse_fastx_file, Sequence, FastxReader};
-
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
+use std::io;
+use std::fs::File;
+use std::io::BufReader;
+use std::io::prelude::*;
+use flate2::read::GzDecoder;
 
 fn main() {
 
@@ -13,28 +10,35 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     // Iterate over all input files and parse all the records into a Vec
-    let mut seqs: Vec<FastxReader::FastxRecord<'static>> = Vec::new();
+    let mut seqs: Vec<String> = Vec::new();
     let mut n_records_all = 0;
     let mut n_bases_all = 0;
 
-    for filename in &args[1..] {
-        //let records = parse_fastx_file(&filename).unwrap();
-        let reader = parse_fastx_file(&filename).expect("valid path/file");
+    for file_name in &args[1..] {
         let mut n_records = 0;
         let mut n_bases = 0;
-        while let Some(record) = reader.next() {
-            let seqrec = record.expect("invalid record");
+        
+        let start = std::time::Instant::now();
+        let file = File::open(file_name).expect("Ooops.");
+        let reader = BufReader::new(GzDecoder::new(file));
 
-            // Increment the number of records
-            n_records += 1;
-            n_bases += seqrec.num_bases();
-            seqs.push(seqrec);
-            //let seq = seqrec.seq();
-            //seqs.push(seqrec.seq().to_string());
-            //seqs.push(seq);
-            //print_type_of(&seqrec);
+        let mut line_n = 0;
+
+        for line in reader.lines() {
+            if line_n % 4 == 1 {
+                let line = line.unwrap();
+                n_records += 1;
+                n_bases += line.len();
+                seqs.push(line);
+            }
+            line_n += 1;
         }
-        println!("File {}: records {}, bases {}", filename, n_records, n_bases);
+
+        let stop = std::time::Instant::now();
+
+    
+        println!("File {}: records {}, bases {}", file_name, n_records, n_bases);
+        println!("Time: {} ms", (stop - start).as_millis());
 
         n_records_all += n_records;
         n_bases_all += n_bases;
