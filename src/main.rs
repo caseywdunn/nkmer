@@ -1,17 +1,19 @@
-use std::array;
-use std::io;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
 use flate2::read::GzDecoder;
+use clap::Parser;
+use std::path::Path;
 
 use std::collections::HashMap;
 
-const PARTS : u32 = 100;
+const PARTS : usize = 100;
 const K : u32 = 21;
+//const HISTO_MAX : u32 = 10_000;
+const HISTO_MAX : u32 = 20;
 
 // Function that takes a DNA sequence as a string and returns reverse complement
-fn revcomp (seq : String) -> String {
+fn revcomp (seq : &String) -> String {
     let mut revcomp = String::new();
     for c in seq.chars().rev() {
         match c {
@@ -35,7 +37,7 @@ fn kmer_revcomp (kmer : u64) -> u64 {
     return revcomp;
 }
 
-fn string2kmers (seq : String) -> Vec<u64> {
+fn string2kmers (seq : &String) -> Vec<u64> {
 
     // kmers are encoded as u64, with two bits per base
     // A = 00, C = 01, G = 10, T = 11
@@ -44,25 +46,25 @@ fn string2kmers (seq : String) -> Vec<u64> {
     let mask : u64 = (1 << (2*K)) - 1;
 
     let mut kmers : Vec<u64> = Vec::new();
-    let mut frame : u64 = 0;
+    let mut frame : u64 = 0;  // read the bits for each based into the least significatnt end of this integer
     let mut n_valid = 0; // number of valid bases in the frame
-    for (i, c) in seq.chars().enumerate() {
+    for (_i, c) in seq.chars().enumerate() {
         let base = match c {
             'A' => 0,
             'C' => 1,
             'G' => 2,
             'T' => 3,
             'N' => 4,
-            _ => 5,
+             _  => 5,
         };
-        if (base < 4) {
+        if base < 4 {
             frame = (frame << 2) | base;
             n_valid += 1;
-            if (n_valid >= K) {
+            if n_valid >= K {
                 kmers.push(frame & mask);
                 //kmers.push(kmer_revcomp(frame & mask));
             }
-        } else if (base==4) {
+        } else if base==4 {
             frame = 0;
             n_valid = 0;
         } else {
@@ -71,22 +73,81 @@ fn string2kmers (seq : String) -> Vec<u64> {
     }
     return kmers;
 }
+
+fn count_kmers (kmers : &Vec<u64>) -> HashMap<u64, u32> {
+    let mut counts : HashMap<u64, u32> = HashMap::new();
+    for kmer in kmers {
+        let count = counts.entry(*kmer).or_insert(0);
+        *count += 1;
+    }
+    return counts;
+}
+
+fn count_histogram (counts : &HashMap<u64, u32>) -> Vec<u32> {
+    let mut histo : Vec<u32> = vec![0; HISTO_MAX as usize + 2]; // +2 to allow for 0 and for >HISTO_MAX
+    for (_kmer, count) in counts {
+        if *count <= HISTO_MAX {
+            histo[*count as usize] += 1;
+        }
+        else {
+            histo[HISTO_MAX as usize + 1] += 1;
+        }
+    }
+    return histo;
+}
+
+fn histogram_string (histo : &Vec<u32>) -> String {
+    let mut s = String::new();
+    for (i, count) in histo.iter().enumerate() {
+        if i > 0 {
+            s.push_str(&format!("{} {}\n", i, count));
+        }
+    }
+    return s;
+}
+
+/// Count k-mers in a set of fastq.gz files, with an option to assess cumulative subsets
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// k-mer length
+    #[arg(short, default_value_t = 21)]
+    k: u32,
+
+    /// Maximum value for histogram
+    #[arg(long, default_value_t = 10000)]
+    histo_max: u32,
+
+    /// Name used for analysis output
+    #[arg(short, long, default_value_t = String::from("sample") )]
+    name: String,
+
+    /// Input files, gzipped fastq
+    #[arg()]
+    input: Vec<String>,
+}
+
+
 fn main() {
 
     // Ingest all command line arguments as input files
-    let args: Vec<String> = std::env::args().collect();
+    //let args: Vec<String> = std::env::args().collect();
+    let args = Args::parse();
 
+    println!("Reading input...");
     // Iterate over all input files and parse all the records into a Vec
     let mut seqs: Vec<String> = Vec::new();
     let mut n_records_all = 0;
     let mut n_bases_all = 0;
 
-    for file_name in &args[1..] {
+    for file_name in args.input {
+    //for file_name in &args[1..] {
         let mut n_records = 0;
         let mut n_bases = 0;
         
         let start = std::time::Instant::now();
-        let file = File::open(file_name).expect("Ooops.");
+        let path = Path::new(&file_name);
+        let file = File::open(path).expect("Ooops.");
         let reader = BufReader::new(GzDecoder::new(file));
 
         let mut line_n = 0;
@@ -113,17 +174,15 @@ fn main() {
 
     println!("Total: records {}, bases {}", n_records_all, n_bases_all);
 
-
-
     let start = std::time::Instant::now();
-    println!("Extracting kmers");
+    println!("Extracting kmers...");
 
     let mut kmers : Vec<u64> = Vec::new();
     for seq in seqs {
         // Call string2kmers on each sequence and append the result to kmers
-        let seq_rc = revcomp(seq.clone());
-        kmers.append(&mut string2kmers(seq));
-        kmers.append(&mut string2kmers(seq_rc));
+        let seq_rc = revcomp(&seq);
+        kmers.append(&mut string2kmers(&seq));
+        kmers.append(&mut string2kmers(&seq_rc));
     }
 
     println!("Total kmers: {}", kmers.len());
@@ -133,20 +192,56 @@ fn main() {
     println!("Time: {} ms", (stop - start).as_millis());
 
     let start = std::time::Instant::now();
-    println!("Counting kmers");
+    println!("Counting all kmers...");
 
-    let mut counts : HashMap<u64, u32> = HashMap::new();
-    for kmer in kmers {
-        let count = counts.entry(kmer).or_insert(0);
-        *count += 1;
+    //let counts = count_kmers(&kmers);
+    //println!("Unique kmers: {}", counts.len());
+
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+
+    let start = std::time::Instant::now();
+    println!("Counting kmers in chunks...");
+
+    let chunk_size = kmers.len() / PARTS;
+    let mut cum_counts : HashMap<u64, u32> = HashMap::new();
+
+    for i in 0..PARTS {
+        let start: usize = i * chunk_size;
+        let end: usize = (i+1) * chunk_size;
+        let counts = count_kmers(&kmers[start..end].to_vec());
+        for (kmer, count) in counts {
+            let cum_count = cum_counts.entry(kmer).or_insert(0);
+            *cum_count += count;
+        }
+
+        let histo = count_histogram(&cum_counts);
+        if i % 20 == 0 {
+            println!("Part {}: unique kmers {}", i, cum_counts.len());
+            let out = histogram_string(&histo);
+            println!("{out}");
+        }
     }
 
     let stop = std::time::Instant::now();
-
     println!("Time: {} ms", (stop - start).as_millis());
 
-    // print the number of unique kmers
-    println!("Unique kmers: {}", counts.len());
 
+}
 
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tests(){
+        assert_eq!(2+2,4);
+    }
+
+    #[test]
+    fn test_revcomp(){
+        let seq = String::from("ACGNTT");
+        let rc = revcomp(&seq);
+        assert_eq!(rc, "AANCGT");
+    }
 }
