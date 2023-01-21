@@ -7,11 +7,6 @@ use std::path::Path;
 
 use std::collections::HashMap;
 
-const PARTS : usize = 100;
-const K : u32 = 21;
-//const HISTO_MAX : u32 = 10_000;
-const HISTO_MAX : u32 = 20;
-
 // Function that takes a DNA sequence as a string and returns reverse complement
 fn revcomp (seq : &String) -> String {
     let mut revcomp = String::new();
@@ -28,22 +23,22 @@ fn revcomp (seq : &String) -> String {
     return revcomp;
 }
 
-fn kmer_revcomp (kmer : u64) -> u64 {
+fn kmer_revcomp (kmer : u64, k:u32) -> u64 {
     let mut revcomp = 0;
-    for i in 0..K {
+    for i in 0..k {
         let base = (kmer >> (2*i)) & 3;
         revcomp = (revcomp << 2) | (3 - base);
     }
     return revcomp;
 }
 
-fn string2kmers (seq : &String) -> Vec<u64> {
+fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
 
     // kmers are encoded as u64, with two bits per base
     // A = 00, C = 01, G = 10, T = 11
 
-    // Create a mask that has 1s in the last 2*K bits
-    let mask : u64 = (1 << (2*K)) - 1;
+    // Create a mask that has 1s in the last 2*k bits
+    let mask : u64 = (1 << (2*k)) - 1;
 
     let mut kmers : Vec<u64> = Vec::new();
     let mut frame : u64 = 0;  // read the bits for each based into the least significatnt end of this integer
@@ -60,7 +55,7 @@ fn string2kmers (seq : &String) -> Vec<u64> {
         if base < 4 {
             frame = (frame << 2) | base;
             n_valid += 1;
-            if n_valid >= K {
+            if n_valid >= k {
                 kmers.push(frame & mask);
                 //kmers.push(kmer_revcomp(frame & mask));
             }
@@ -83,14 +78,14 @@ fn count_kmers (kmers : &Vec<u64>) -> HashMap<u64, u32> {
     return counts;
 }
 
-fn count_histogram (counts : &HashMap<u64, u32>) -> Vec<u32> {
-    let mut histo : Vec<u32> = vec![0; HISTO_MAX as usize + 2]; // +2 to allow for 0 and for >HISTO_MAX
+fn count_histogram (counts : &HashMap<u64, u32>, histo_max : u32) -> Vec<u32> {
+    let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
     for (_kmer, count) in counts {
-        if *count <= HISTO_MAX {
+        if *count <= histo_max {
             histo[*count as usize] += 1;
         }
         else {
-            histo[HISTO_MAX as usize + 1] += 1;
+            histo[histo_max as usize + 1] += 1;
         }
     }
     return histo;
@@ -117,6 +112,10 @@ struct Args {
     /// Maximum value for histogram
     #[arg(long, default_value_t = 10000)]
     histo_max: u32,
+
+    /// Number of chunks to divide the data into
+    #[arg(long, default_value_t = 10)]
+    n: usize,
 
     /// Name used for analysis output
     #[arg(short, long, default_value_t = String::from("sample") )]
@@ -181,8 +180,8 @@ fn main() {
     for seq in seqs {
         // Call string2kmers on each sequence and append the result to kmers
         let seq_rc = revcomp(&seq);
-        kmers.append(&mut string2kmers(&seq));
-        kmers.append(&mut string2kmers(&seq_rc));
+        kmers.append(&mut string2kmers(&seq, args.k));
+        kmers.append(&mut string2kmers(&seq_rc, args.k));
     }
 
     println!("Total kmers: {}", kmers.len());
@@ -204,10 +203,10 @@ fn main() {
     let start = std::time::Instant::now();
     println!("Counting kmers in chunks...");
 
-    let chunk_size = kmers.len() / PARTS;
+    let chunk_size = kmers.len() / args.n;
     let mut cum_counts : HashMap<u64, u32> = HashMap::new();
 
-    for i in 0..PARTS {
+    for i in 0..args.n {
         let start: usize = i * chunk_size;
         let end: usize = (i+1) * chunk_size;
         let counts = count_kmers(&kmers[start..end].to_vec());
@@ -216,12 +215,10 @@ fn main() {
             *cum_count += count;
         }
 
-        let histo = count_histogram(&cum_counts);
-        if i % 20 == 0 {
-            println!("Part {}: unique kmers {}", i, cum_counts.len());
-            let out = histogram_string(&histo);
-            println!("{out}");
-        }
+        let histo = count_histogram(&cum_counts, args.histo_max);
+        println!("Part {}: unique kmers {}", i, cum_counts.len());
+        let out = histogram_string(&histo);
+        println!("{out}");
     }
 
     let stop = std::time::Instant::now();
