@@ -119,10 +119,10 @@ struct Args {
 
     /// Name used for analysis output
     #[arg(short, long, default_value_t = String::from("sample") )]
-    name: String,
+    output: String,
 
     /// Input files, gzipped fastq
-    #[arg()]
+    #[arg(required = true)]
     input: Vec<String>,
 }
 
@@ -132,6 +132,8 @@ fn main() {
     // Ingest all command line arguments as input files
     //let args: Vec<String> = std::env::args().collect();
     let args = Args::parse();
+
+    assert!(args.k < 32, "k must be less than 32 due to use of 64 bit integers to encode kmers");
 
     println!("Reading input...");
     // Iterate over all input files and parse all the records into a Vec
@@ -218,7 +220,13 @@ fn main() {
         let histo = count_histogram(&cum_counts, args.histo_max);
         println!("Part {}: unique kmers {}", i, cum_counts.len());
         let out = histogram_string(&histo);
-        println!("{out}");
+        // println!("{out}");
+
+        // Write the histogram to a file
+        let file_name =  &format!("{output}_k{k}_part{i}.histo", output=args.output, k=args.k);
+        let out_path = Path::new(&file_name);
+        let mut file = File::create(file_name).unwrap();
+        file.write_all(out.as_bytes());
     }
 
     let stop = std::time::Instant::now();
