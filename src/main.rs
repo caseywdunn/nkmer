@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use flate2::read::GzDecoder;
 use clap::Parser;
 use std::path::Path;
-
+use std::collections::HashSet;
 use std::collections::HashMap;
 
 // Function that takes a DNA sequence as a string and returns reverse complement
@@ -41,7 +41,8 @@ fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
     let mask : u64 = (1 << (2*k)) - 1;
 
     let mut kmers : Vec<u64> = Vec::new();
-    let mut frame : u64 = 0;  // read the bits for each based into the least significatnt end of this integer
+    let mut frame : u64 = 0;  // read the bits for each base into the least significant end of this integer
+    let mut revframe : u64 = 0;  // read the bits for complement into the least significant end of this integer
     let mut n_valid = 0; // number of valid bases in the frame
     for (_i, c) in seq.chars().enumerate() {
         let base = match c {
@@ -54,13 +55,24 @@ fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
         };
         if base < 4 {
             frame = (frame << 2) | base;
+
+            revframe = (revframe >> 2) | ((3 - base) << (2*(k-1)));
+
             n_valid += 1;
             if n_valid >= k {
-                kmers.push(frame & mask);
-                //kmers.push(kmer_revcomp(frame & mask));
+
+                let forward = frame & mask;
+                let reverse = revframe & mask;
+
+                if forward < reverse {
+                    kmers.push(forward);
+                } else {
+                    kmers.push(reverse);
+                }
             }
         } else if base==4 {
             frame = 0;
+            revframe = 0;
             n_valid = 0;
         } else {
             panic!("Invalid base: {}", c);
@@ -181,9 +193,9 @@ fn main() {
     let mut kmers : Vec<u64> = Vec::new();
     for seq in seqs {
         // Call string2kmers on each sequence and append the result to kmers
-        let seq_rc = revcomp(&seq);
+        //let seq_rc = revcomp(&seq);
         kmers.append(&mut string2kmers(&seq, args.k));
-        kmers.append(&mut string2kmers(&seq_rc, args.k));
+        //kmers.append(&mut string2kmers(&seq_rc, args.k));
     }
 
     println!("Total kmers: {}", kmers.len());
@@ -248,5 +260,42 @@ mod tests {
         let seq = String::from("ACGNTT");
         let rc = revcomp(&seq);
         assert_eq!(rc, "AANCGT");
+    }
+
+    #[test]
+    fn test_strings2kmer(){
+        let seq = String::from("ACGNTT");
+        let kmer = string2kmers(&seq, 3);
+
+        // The only valid 3-mer in this sequence is ACG
+        // A = 00, C = 01, G = 10, T = 11
+        // ACG = 000110
+        // CGT = 011011 , need to check reverse complement
+        // It is the smallest that will be retained
+        assert_eq!(kmer[0], 0b0000000000000000000000000000000000000000000000000000000000000110);
+
+        // Check reverse complement of the sequence, which should be the same
+        let seq_rc = revcomp(&seq);
+        let kmer_rc = string2kmers(&seq_rc, 3);
+        assert_eq!(kmer_rc[0], 0b0000000000000000000000000000000000000000000000000000000000000110);
+    }
+
+    #[test]
+    fn test_strings2kmer_revcomp(){
+        let seq = String::from("ACGCTNCGTT");
+        let kmers_f = string2kmers(&seq, 3);
+        let kmers_r = string2kmers(&revcomp(&seq), 3);
+        // let kmers_r = string2kmers(&String::from("ACTGCTNCGTT"), 3); // This should fail
+
+
+        // Check that the kmers are the same
+        // Convert the kmers to hash sets
+        let kmers_f_set: HashSet<u64> = kmers_f.iter().cloned().collect();
+        let kmers_r_set: HashSet<u64> = kmers_r.iter().cloned().collect();
+
+        // Check that the sets are equal
+        assert_eq!(kmers_f_set, kmers_r_set);
+
+
     }
 }
