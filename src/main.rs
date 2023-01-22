@@ -161,10 +161,11 @@ fn main() {
         let start = std::time::Instant::now();
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
-        let reader = BufReader::new(GzDecoder::new(file));
 
         let mut line_n = 0;
 
+        /* 
+        let reader = BufReader::new(GzDecoder::new(file));
         for line in reader.lines() {
             if line_n % 4 == 1 {
                 let line = line.unwrap();
@@ -173,7 +174,35 @@ fn main() {
                 seqs.push(line);
             }
             line_n += 1;
+        } */
+
+        // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
+        // Handle gzip files with multiple blocks
+
+        let mut reader = BufReader::new(file);
+        loop {
+            //loop over all possible gzip members
+            match reader.fill_buf() {
+                Ok(b) => if b.is_empty() { break },
+                Err(e) => panic!("{}", e)
+            }
+        
+            //decode the next member
+            let gz = flate2::bufread::GzDecoder::new(&mut reader);
+            let block_reader = BufReader::new(gz);
+            for line in block_reader.lines() {
+                if line_n % 4 == 1 {
+                    let line = line.unwrap();
+                    n_records += 1;
+                    n_bases += line.len();
+                    seqs.push(line);
+                }
+                line_n += 1;
+            }
+        
         }
+
+
 
         let stop = std::time::Instant::now();
 
