@@ -192,47 +192,37 @@ fn main() {
 
     let mut kmers : Vec<u64> = Vec::new();
     for seq in seqs {
-        // Call string2kmers on each sequence and append the result to kmers
-        //let seq_rc = revcomp(&seq);
         kmers.append(&mut string2kmers(&seq, args.k));
-        //kmers.append(&mut string2kmers(&seq_rc, args.k));
     }
 
     println!("Total kmers: {}", kmers.len());
-
     let stop = std::time::Instant::now();
-
     println!("Time: {} ms", (stop - start).as_millis());
 
-    let start = std::time::Instant::now();
+    /* let start = std::time::Instant::now();
     println!("Counting all kmers...");
-
-    //let counts = count_kmers(&kmers);
-    //println!("Unique kmers: {}", counts.len());
-
+    let counts_all = count_kmers(&kmers[..].to_vec());
     let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
-
+    println!("Time: {} ms", (stop - start).as_millis()); */
 
     let start = std::time::Instant::now();
     println!("Counting kmers in chunks...");
 
     let chunk_size = kmers.len() / args.n;
-    let mut cum_counts : HashMap<u64, u32> = HashMap::new();
+    let mut cumulative_counts : HashMap<u64, u32> = HashMap::new();
 
     for i in 0..args.n {
         let start: usize = i * chunk_size;
         let end: usize = (i+1) * chunk_size;
         let counts = count_kmers(&kmers[start..end].to_vec());
         for (kmer, count) in counts {
-            let cum_count = cum_counts.entry(kmer).or_insert(0);
+            let cum_count = cumulative_counts.entry(kmer).or_insert(0);
             *cum_count += count;
         }
 
-        let histo = count_histogram(&cum_counts, args.histo_max);
-        println!("Part {}: unique kmers {}", i, cum_counts.len());
+        let histo = count_histogram( &cumulative_counts, args.histo_max);
+        println!("Part {}: unique kmers {}", i, cumulative_counts.len());
         let out = histogram_string(&histo);
-        // println!("{out}");
 
         // Write the histogram to a file
         let file_name =  &format!("{output}_k{k}_part{i}.histo", output=args.output, k=args.k);
