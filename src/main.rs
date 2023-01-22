@@ -90,7 +90,7 @@ fn count_kmers (kmers : &Vec<u64>) -> HashMap<u64, u32> {
     return counts;
 }
 
-fn count_histogram (counts : &HashMap<u64, u32>, histo_max : u32) -> Vec<u32> {
+fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
     let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
     for (_kmer, count) in counts {
         if *count <= histo_max {
@@ -123,7 +123,7 @@ struct Args {
 
     /// Maximum value for histogram
     #[arg(long, default_value_t = 10000)]
-    histo_max: u32,
+    histo_max: u64,
 
     /// Number of chunks to divide the data into
     #[arg(long, default_value_t = 10)]
@@ -221,13 +221,19 @@ fn main() {
         println!("Input file statistics not calculated, using max_reads = {} as the number of reads. Number of bases unknown.", args.max_reads);
     }
 
-    // Process the input files
-    let mut seqs: Vec<String> = Vec::new();
-    for file_name in args.input {
+    let mut n_bases_processed:u64 = 0;
+    let mut n_records_processed:u64 = 0;
+
+    let chunk_size = n_records_all / args.n as u64;
+    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
+
+    // Ingest the data and count kmers
+    let start = std::time::Instant::now();
+    let mut chunk_i = 0;
+    'processing_files: for file_name in args.input {
         let mut n_records: u64 = 0;
         let mut n_bases: u64 = 0;
         
-        let start = std::time::Instant::now();
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
 
@@ -250,72 +256,46 @@ fn main() {
             for line in block_reader.lines() {
                 if line_n % 4 == 1 {
                     let line = line.unwrap();
-                    n_records += 1;
-                    n_bases += line.len() as u64;
-                    seqs.push(line);
+                    n_records_processed += 1;
+                    n_bases_processed += line.len() as u64;
+
+                    // Count the kmers
+                    let kmers = string2kmers(&line, args.k);
+                    for kmer in kmers {
+                        let count = kmer_counts.entry(kmer).or_insert(0);
+                        *count += 1;
+                    }
+
+                    // If we've processed enough records, write the output
+                    if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
+                        println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
+                        let start = std::time::Instant::now();
+                        
+                        let histo = count_histogram( &kmer_counts, args.histo_max);
+                        let out = histogram_string(&histo);
+                
+                        // Write the histogram to a file
+                        let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
+                        let out_path = Path::new(&file_name);
+                        let mut file = File::create(file_name).unwrap();
+                        file.write_all(out.as_bytes());
+
+                        chunk_i += 1;
+                    }
+
+                    if n_records_processed >= (args.n as u64 * chunk_size) {
+                        println!("  Skipping last few reads after the last full chunk...");
+                        break 'processing_files;
+                    }
                 }
                 line_n += 1;
             }
-        
         }
-
-        let stop = std::time::Instant::now();
-
-        println!("Time: {} ms", (stop - start).as_millis());
-
-        n_records_all += n_records;
-        n_bases_all += n_bases;
     }
 
-    println!("Total: records {}, bases {}", n_records_all, n_bases_all);
-
-    let start = std::time::Instant::now();
-    println!("Extracting kmers...");
-
-    let mut kmers : Vec<u64> = Vec::new();
-    for seq in seqs {
-        kmers.append(&mut string2kmers(&seq, args.k));
-    }
-
-    println!("Total kmers: {}", kmers.len());
+    println!("Total processed: records {}, bases {}", n_records_processed, n_bases_processed);
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
-
-    /* let start = std::time::Instant::now();
-    println!("Counting all kmers...");
-    let counts_all = count_kmers(&kmers[..].to_vec());
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis()); */
-
-    let start = std::time::Instant::now();
-    println!("Counting kmers in chunks...");
-
-    let chunk_size = kmers.len() / args.n;
-    let mut cumulative_counts : HashMap<u64, u32> = HashMap::new();
-
-    for i in 0..args.n {
-        let start: usize = i * chunk_size;
-        let end: usize = (i+1) * chunk_size;
-        let counts = count_kmers(&kmers[start..end].to_vec());
-        for (kmer, count) in counts {
-            let cum_count = cumulative_counts.entry(kmer).or_insert(0);
-            *cum_count += count;
-        }
-
-        let histo = count_histogram( &cumulative_counts, args.histo_max);
-        println!("Part {}: unique kmers {}", i, cumulative_counts.len());
-        let out = histogram_string(&histo);
-
-        // Write the histogram to a file
-        let file_name =  &format!("{output}_k{k}_part{i}.histo", output=args.output, k=args.k);
-        let out_path = Path::new(&file_name);
-        let mut file = File::create(file_name).unwrap();
-        file.write_all(out.as_bytes());
-    }
-
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
-
 
 }
 
