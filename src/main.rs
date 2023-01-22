@@ -129,6 +129,10 @@ struct Args {
     #[arg(long, default_value_t = 10)]
     n: usize,
 
+    /// Maximum number of reads to process
+    #[arg(short, long, default_value_t = 0)]
+    max_reads: u64,
+
     /// Name used for analysis output
     #[arg(short, long, default_value_t = String::from("sample") )]
     output: String,
@@ -138,43 +142,19 @@ struct Args {
     input: Vec<String>,
 }
 
+fn get_fastq_stats(input_files : &Vec<String>) -> (u64, u64){
+    let mut n_records_all:u64 = 0;
+    let mut n_bases_all:u64 = 0;
 
-fn main() {
-
-    // Ingest all command line arguments as input files
-    //let args: Vec<String> = std::env::args().collect();
-    let args = Args::parse();
-
-    assert!(args.k < 32, "k must be less than 32 due to use of 64 bit integers to encode kmers");
-
-    println!("Reading input...");
-    // Iterate over all input files and parse all the records into a Vec
-    let mut seqs: Vec<String> = Vec::new();
-    let mut n_records_all = 0;
-    let mut n_bases_all = 0;
-
-    for file_name in args.input {
-    //for file_name in &args[1..] {
-        let mut n_records = 0;
-        let mut n_bases = 0;
+    for file_name in input_files {
+        let mut n_records:u64 = 0;
+        let mut n_bases:u64 = 0;
         
         let start = std::time::Instant::now();
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
 
-        let mut line_n = 0;
-
-        /* 
-        let reader = BufReader::new(GzDecoder::new(file));
-        for line in reader.lines() {
-            if line_n % 4 == 1 {
-                let line = line.unwrap();
-                n_records += 1;
-                n_bases += line.len();
-                seqs.push(line);
-            }
-            line_n += 1;
-        } */
+        let mut line_n:u64 = 0;
 
         // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
         // Handle gzip files with multiple blocks
@@ -194,7 +174,84 @@ fn main() {
                 if line_n % 4 == 1 {
                     let line = line.unwrap();
                     n_records += 1;
-                    n_bases += line.len();
+                    n_bases += line.len() as u64;
+                }
+                line_n += 1;
+            }
+        
+        }
+
+        n_records_all += n_records;
+        n_bases_all += n_bases;
+
+        println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
+    }
+
+    return (n_records_all, n_bases_all);
+}
+
+
+fn main() {
+
+    // Ingest all command line arguments as input files
+    //let args: Vec<String> = std::env::args().collect();
+    let args = Args::parse();
+
+    assert!(args.k < 32, "k must be less than 32 due to use of 64 bit integers to encode kmers");
+
+    println!("Reading input...");
+
+
+    let mut n_records_all:u64 = 0;
+    let mut n_bases_all:u64 = 0;
+
+    if args.max_reads == 0 {
+        println!("Getting input file statistics...");
+        let start = std::time::Instant::now();
+        let (n_records, n_bases) = get_fastq_stats(&args.input);
+        let stop = std::time::Instant::now();
+        println!("Time: {} ms", (stop - start).as_millis());
+        
+        n_records_all = n_records;
+        n_bases_all = n_bases;
+        println!("Total records {}, total bases {}, mean read length {}", n_records_all, n_bases_all, n_bases_all as f64 / n_records_all as f64)
+    } else {
+        n_records_all = args.max_reads;
+        n_bases_all = 0;
+        println!("Input file statistics not calculated, using max_reads = {} as the number of reads. Number of bases unknown.", args.max_reads);
+    }
+
+    // Process the input files
+    let mut seqs: Vec<String> = Vec::new();
+    for file_name in args.input {
+        let mut n_records: u64 = 0;
+        let mut n_bases: u64 = 0;
+        
+        let start = std::time::Instant::now();
+        let path = Path::new(&file_name);
+        let file = File::open(path).expect("Ooops.");
+
+        let mut line_n = 0;
+
+        // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
+        // Handle gzip files with multiple blocks
+
+        let mut reader = BufReader::new(file);
+        loop {
+            //loop over all possible gzip members
+            match reader.fill_buf() {
+                Ok(b) => if b.is_empty() { break },
+                Err(e) => panic!("{}", e)
+            }
+        
+            //decode the next member
+            let gz = flate2::bufread::GzDecoder::new(&mut reader);
+            let block_reader = BufReader::new(gz);
+            for line in block_reader.lines() {
+                if line_n % 4 == 1 {
+                    let line = line.unwrap();
+                    n_records += 1;
+                    n_bases += line.len() as u64;
                     seqs.push(line);
                 }
                 line_n += 1;
@@ -202,12 +259,8 @@ fn main() {
         
         }
 
-
-
         let stop = std::time::Instant::now();
 
-    
-        println!("File {}: records {}, bases {}", file_name, n_records, n_bases);
         println!("Time: {} ms", (stop - start).as_millis());
 
         n_records_all += n_records;
