@@ -13,3 +13,4 @@ clap = { version = "*", features = ["derive"]}
 dashmap = "*"
 fxhash = "*"
 rustc-hash = "*"
+nohash-hasher = "*"

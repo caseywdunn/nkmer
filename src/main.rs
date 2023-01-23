@@ -10,6 +10,7 @@ use std::hash::BuildHasherDefault;
 use dashmap::DashMap;
 use fxhash::FxHasher;
 use rustc_hash::FxHashMap;
+use nohash_hasher::NoHashHasher;
 
 // Function that takes a DNA sequence as a string and returns reverse complement
 fn revcomp (seq : &String) -> String {
@@ -221,8 +222,9 @@ fn main() {
     let mut n_records_processed:u64 = 0;
 
     let chunk_size = n_records_all / args.n as u64;
-    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
-    
+    // https://docs.rs/nohash-hasher/latest/nohash_hasher/struct.NoHashHasher.html
+    let mut kmer_counts : HashMap<u64, u64, BuildHasherDefault<NoHashHasher<u64>>> = HashMap::with_capacity_and_hasher(1000000, BuildHasherDefault::default());
+    //let mut kmer_counts: FxHashMap<u64, u64> = FxHashMap::default();
     // let mut kmer_counts_dash : DashMap<u64, u64, BuildHasherDefault<FxHasher>> = DashMap::new();
 
     // Ingest the data and count kmers
@@ -268,7 +270,18 @@ fn main() {
                         println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
                         let start = std::time::Instant::now();
                         
-                        let histo = count_histogram( &kmer_counts, args.histo_max);
+                        //let histo = count_histogram( &kmer_counts, args.histo_max);
+
+                        let mut histo : Vec<u32> = vec![0; args.histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
+                        for (_kmer, count) in kmer_counts {
+                            if count <= args.histo_max {
+                                histo[count as usize] += 1;
+                            }
+                            else {
+                                histo[args.histo_max as usize + 1] += 1;
+                            }
+                        }
+
                         let out = histogram_string(&histo);
                 
                         // Write the histogram to a file
