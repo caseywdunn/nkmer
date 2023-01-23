@@ -6,6 +6,10 @@ use clap::Parser;
 use std::path::Path;
 use std::collections::HashSet;
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+use dashmap::DashMap;
+use fxhash::FxHasher;
+use rustc_hash::FxHashMap;
 
 // Function that takes a DNA sequence as a string and returns reverse complement
 fn revcomp (seq : &String) -> String {
@@ -20,7 +24,7 @@ fn revcomp (seq : &String) -> String {
             _ => panic!("Invalid base: {}", c),
         }
     }
-    return revcomp;
+    revcomp
 }
 
 fn kmer_revcomp (kmer : u64, k:u32) -> u64 {
@@ -29,9 +33,10 @@ fn kmer_revcomp (kmer : u64, k:u32) -> u64 {
         let base = (kmer >> (2*i)) & 3;
         revcomp = (revcomp << 2) | (3 - base);
     }
-    return revcomp;
+    revcomp
 }
 
+#[inline(always)]
 fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
 
     // kmers are encoded as u64, with two bits per base
@@ -78,16 +83,7 @@ fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
             panic!("Invalid base: {}", c);
         }
     }
-    return kmers;
-}
-
-fn count_kmers (kmers : &Vec<u64>) -> HashMap<u64, u32> {
-    let mut counts : HashMap<u64, u32> = HashMap::new();
-    for kmer in kmers {
-        let count = counts.entry(*kmer).or_insert(0);
-        *count += 1;
-    }
-    return counts;
+    kmers
 }
 
 fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
@@ -100,7 +96,7 @@ fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
             histo[histo_max as usize + 1] += 1;
         }
     }
-    return histo;
+    histo
 }
 
 fn histogram_string (histo : &Vec<u32>) -> String {
@@ -110,7 +106,7 @@ fn histogram_string (histo : &Vec<u32>) -> String {
             s.push_str(&format!("{} {}\n", i, count));
         }
     }
-    return s;
+    s
 }
 
 /// Count k-mers in a set of fastq.gz files, with an option to assess cumulative subsets
@@ -187,7 +183,7 @@ fn get_fastq_stats(input_files : &Vec<String>) -> (u64, u64){
         println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
     }
 
-    return (n_records_all, n_bases_all);
+    (n_records_all, n_bases_all)
 }
 
 
@@ -226,6 +222,8 @@ fn main() {
 
     let chunk_size = n_records_all / args.n as u64;
     let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
+    
+    // let mut kmer_counts_dash : DashMap<u64, u64, BuildHasherDefault<FxHasher>> = DashMap::new();
 
     // Ingest the data and count kmers
     println!("Counting kmers...");
@@ -297,6 +295,7 @@ fn main() {
 
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
