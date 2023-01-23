@@ -228,16 +228,15 @@ fn main() {
     let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
 
     // Ingest the data and count kmers
+    println!("Counting kmers...");
     let start = std::time::Instant::now();
     let mut chunk_i = 0;
     'processing_files: for file_name in args.input {
-        let mut n_records: u64 = 0;
-        let mut n_bases: u64 = 0;
         
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
 
-        let mut line_n = 0;
+        let mut line_n:u64 = 0;
 
         // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
         // Handle gzip files with multiple blocks
@@ -281,11 +280,10 @@ fn main() {
                         file.write_all(out.as_bytes());
 
                         chunk_i += 1;
-                    }
 
-                    if n_records_processed >= (args.n as u64 * chunk_size) {
-                        println!("  Skipping last few reads after the last full chunk...");
-                        break 'processing_files;
+                        if chunk_i >= args.n {
+                            break 'processing_files;
+                        }
                     }
                 }
                 line_n += 1;
