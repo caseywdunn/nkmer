@@ -253,6 +253,8 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+
+
     // Naive hash map
     println!("");
     println!("Standard hashmap...");
@@ -266,16 +268,20 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+
+    
+
     // Bloom hash map
     println!("");
     println!("Standard hashmap with bloom filter...");
+    let kmers1 = kmers.clone();
     let start = std::time::Instant::now();
     let mut kmer_counts_HashMap_bloom : HashMap<u64, u64> = HashMap::new();
 
     let false_positive_rate = 0.001;
     let mut filter = BloomFilter::with_rate(false_positive_rate, n_kmers);
 
-    for kmer in kmers {
+    for kmer in kmers1 {
         if filter.contains(&kmer) {
             let count = kmer_counts_HashMap_bloom.entry(kmer).or_insert(0);
             *count += 1;
@@ -287,6 +293,34 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+    // FX hash map
+
+    println!("");
+    println!("Fx hashmap...");
+    let kmers2 = kmers.clone();
+    let start = std::time::Instant::now();
+    let mut kmer_counts_Fx: FxHashMap<u64, u64> = FxHashMap::default();
+    for kmer in kmers2 {
+        let count = kmer_counts_Fx.entry(kmer).or_insert(0);
+        *count += 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    // NoHash hash map
+    println!("");
+    println!("NoHash hashmap...");
+    let kmers3 = kmers.clone();
+    let start = std::time::Instant::now();
+    // https://docs.rs/nohash-hasher/latest/nohash_hasher/struct.NoHashHasher.html
+    let mut kmer_counts_nohash : HashMap<u64, u64, BuildHasherDefault<NoHashHasher<u64>>> = HashMap::with_capacity_and_hasher(1000000, BuildHasherDefault::default());
+
+    for kmer in kmers3 {
+        let count = kmer_counts_nohash.entry(kmer).or_insert(0);
+        *count += 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
 
     /*
     let mut n_records_all:u64 = 0;
