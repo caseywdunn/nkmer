@@ -11,6 +11,7 @@ use dashmap::DashMap;
 use fxhash::FxHasher;
 use rustc_hash::FxHashMap;
 use nohash_hasher::NoHashHasher;
+use bloom::{ASMS,BloomFilter};
 
 // Function that takes a DNA sequence as a string and returns reverse complement
 fn revcomp (seq : &String) -> String {
@@ -187,6 +188,49 @@ fn get_fastq_stats(input_files : &Vec<String>) -> (u64, u64){
     (n_records_all, n_bases_all)
 }
 
+// Take in a vector of file names and k and return a vector of kmer integers
+fn get_kmer_vector(input_files : &Vec<String>, k : u32) -> (Vec<u64>, u64, u64) {
+    let mut kmers : Vec<u64> = Vec::new();
+
+    let mut n_records_processed:u64 = 0;
+    let mut n_bases_processed:u64 = 0;
+
+    for file_name in input_files {
+        let path = Path::new(&file_name);
+        let file = File::open(path).expect("Ooops.");
+
+        let mut line_n:u64 = 0;
+
+        // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
+        // Handle gzip files with multiple blocks
+
+        let mut reader = BufReader::new(file);
+        loop {
+            //loop over all possible gzip members
+            match reader.fill_buf() {
+                Ok(b) => if b.is_empty() { break },
+                Err(e) => panic!("{}", e)
+            }
+
+            //decode the next member
+            let gz = flate2::bufread::GzDecoder::new(&mut reader);
+            let block_reader = BufReader::new(gz);
+            for line in block_reader.lines() {
+                if line_n % 4 == 1 {
+                    let line = line.unwrap();
+                    n_records_processed += 1;
+                    n_bases_processed += line.len() as u64;
+
+                    // Count the kmers
+                    let mut kmers_line = string2kmers(&line, k);
+                    kmers.append(&mut kmers_line);
+                }
+                line_n += 1;
+            }
+        }
+    }
+    (kmers, n_records_processed, n_bases_processed)
+}
 
 fn main() {
 
@@ -196,9 +240,55 @@ fn main() {
 
     assert!(args.k < 32, "k must be less than 32 due to use of 64 bit integers to encode kmers");
 
-    println!("Reading input...");
+    let mut kmers : Vec<u64> = Vec::new();
+    let mut n_records_processed:u64 = 0;
+    let mut n_bases_processed:u64 = 0;
+
+    // Get the kmer vector
+    println!("Reading input files...");
+    let start = std::time::Instant::now();
+    (kmers, n_records_processed, n_bases_processed) = get_kmer_vector(&args.input, args.k);
+    let n_kmers : u32 = kmers.len() as u32; 
+    println!("Total processed: records {}, bases {}, kmers {}", n_records_processed, n_bases_processed, n_kmers);
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    // Naive hash map
+    println!("");
+    println!("Standard hashmap...");
+    let kmers0 = kmers.clone();
+    let start = std::time::Instant::now();
+    let mut kmer_counts_HashMap : HashMap<u64, u64> = HashMap::new();
+    for kmer in kmers0 {
+        let count = kmer_counts_HashMap.entry(kmer).or_insert(0);
+        *count += 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    // Bloom hash map
+    println!("");
+    println!("Standard hashmap with bloom filter...");
+    let start = std::time::Instant::now();
+    let mut kmer_counts_HashMap_bloom : HashMap<u64, u64> = HashMap::new();
+
+    let false_positive_rate = 0.001;
+    let mut filter = BloomFilter::with_rate(false_positive_rate, n_kmers);
+
+    for kmer in kmers {
+        if filter.contains(&kmer) {
+            let count = kmer_counts_HashMap_bloom.entry(kmer).or_insert(0);
+            *count += 1;
+        } else {
+            filter.insert(&kmer);
+        }
+    }
+
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
 
 
+    /*
     let mut n_records_all:u64 = 0;
     let mut n_bases_all:u64 = 0;
 
@@ -305,6 +395,7 @@ fn main() {
     println!("Total processed: records {}, bases {}", n_records_processed, n_bases_processed);
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
+    */
 
 }
 
