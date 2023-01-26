@@ -12,6 +12,8 @@ use fxhash::FxHasher;
 use rustc_hash::FxHashMap;
 use nohash_hasher::NoHashHasher;
 use bloom::{ASMS,BloomFilter};
+use sprs::{CsMat, CsVec};
+use rdxsort::*;
 
 // Function that takes a DNA sequence as a string and returns reverse complement
 fn revcomp (seq : &String) -> String {
@@ -255,7 +257,7 @@ fn main() {
 
 
 
-    // Naive hash map
+    // Standard hash map
     println!("");
     println!("Standard hashmap...");
     let kmers0 = kmers.clone();
@@ -268,8 +270,141 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+    // Standard hash map with set for unique kmers
+    println!("");
+    println!("Standard hashmap with set for unique kmers...");
+    let kmers9 = kmers.clone();
+    let start = std::time::Instant::now();
+    let mut kmer_counts_HashMap : HashMap<u64, u64> = HashMap::new();
+    let mut kmer_set : HashSet<u64> = HashSet::new();
+    for kmer in kmers9 {
+        if kmer_set.contains(&kmer) {
+            let count = kmer_counts_HashMap.entry(kmer).or_insert(0);
+            *count += 1;
+        } else {
+            kmer_set.insert(kmer);
+        }
+        let count = kmer_counts_HashMap.entry(kmer).or_insert(0);
+        *count += 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    /* 
+    // Now way to insert indices out of order?
+    // https://docs.rs/sprs/latest/sprs/struct.CsVecBase.html
+    // Sparse vector
+    println!("");
+    println!("Sparse vector...");
+    let kmers6 = kmers.clone();
+    let start = std::time::Instant::now();
+    let max_val = 2u64.pow(args.k * 2) as usize;
+    let mut counts_sparse = CsVec::new(max_val, vec![0], vec![0 as u64]);
+    for kmer in kmers6 {
+        counts_sparse[kmer as usize] = counts_sparse[kmer as usize] + 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+    */
+
+    // Radix sort and count
+    println!("");
+    println!("Radix sort and count...");
+    let mut kmers8 = kmers.clone();
+    let start = std::time::Instant::now();
+    kmers8.rdxsort();
+    let mut kmer_counts_sort : HashMap<u64, u64> = HashMap::new();
+    let mut kmer_prev : u64 = 0;
+    let mut count : u64 = 0;
+    for kmer in kmers8 {
+        if kmer == kmer_prev {
+            count += 1;
+        } else {
+            if count > 0 {
+                kmer_counts_sort.insert(kmer_prev, count);
+            }
+            kmer_prev = kmer;
+            count = 1;
+        }
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    // Sort and count
+    println!("");
+    println!("Sort and count...");
+    let mut kmers7 = kmers.clone();
+    let start = std::time::Instant::now();
+    kmers7.sort();
+    let mut kmer_counts_sort : HashMap<u64, u64> = HashMap::new();
+    let mut kmer_prev : u64 = 0;
+    let mut count : u64 = 0;
+    for kmer in kmers7 {
+        if kmer == kmer_prev {
+            count += 1;
+        } else {
+            if count > 0 {
+                kmer_counts_sort.insert(kmer_prev, count);
+            }
+            kmer_prev = kmer;
+            count = 1;
+        }
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+
 
     
+
+
+    // Divide and conquer
+    println!("");
+    println!("Divide and conquer...");
+
+    let kmers4 = kmers.clone();
+    let start = std::time::Instant::now();
+
+    let parts: usize = 50000;
+    let mut kmer_counts_dc : HashMap<u64, u64> = HashMap::new();
+    let n_k : usize = kmers4.len() / parts;
+    for part in 0..=parts{
+        let mut kmer_counts_part : HashMap<u64, u64> = HashMap::new();
+        if part < parts {
+            let start: usize = part * n_k / parts;
+            let end: usize = (part + 1) * n_k / parts;
+            for kmer in &kmers4[start..end] {
+                let count = kmer_counts_part.entry(*kmer).or_insert(0);
+                *count += 1;
+            }
+        }
+        // Add the counts in the part to the total
+        for (kmer, count) in kmer_counts_part {
+            let count_total = kmer_counts_dc.entry(kmer).or_insert(0);
+            *count_total += count;
+        }
+
+    }
+    for kmer in kmers4 {
+        let count = kmer_counts_HashMap.entry(kmer).or_insert(0);
+        *count += 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+    
+    // DashMap
+    println!("");
+    println!("DashMap...");
+    let kmers5 = kmers.clone();
+    let start = std::time::Instant::now();
+    let mut kmer_counts_DashMap : DashMap<u64, u64> = DashMap::new();
+    for kmer in kmers5 {
+        let mut count = kmer_counts_DashMap.entry(kmer).or_insert(0);
+        // kmer_counts_DashMap.insert(kmer, *count + 1);
+        *count += 1;
+    }
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
 
     // Bloom hash map
     println!("");
@@ -307,6 +442,7 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+    /* 
     // NoHash hash map
     println!("");
     println!("NoHash hashmap...");
@@ -321,7 +457,7 @@ fn main() {
     }
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
-
+    */
     /*
     let mut n_records_all:u64 = 0;
     let mut n_bases_all:u64 = 0;
