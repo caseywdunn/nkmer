@@ -1,13 +1,9 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
-
 use clap::Parser;
 use std::path::Path;
-
 use std::collections::HashMap;
-
-
 
 #[inline(always)]
 fn string2kmers (seq : &String, k:u32) -> Vec<u64> {

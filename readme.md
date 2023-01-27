@@ -38,3 +38,17 @@ Each histo includes the number of kmers with frequencies up to `--histo-max`.
 
 `nkmer` uses an unsigned 64 bit integer representation of kmers, where each nucleotide is encoded as two bits. This limits the length of kmers to 31,
 since k must be odd (to avoid pailindromes) and the two bits per nucleotide must fit within the integer length.
+
+## Development
+
+Some common tasks in development:
+
+    cargo test
+    cargo clippy
+    cargo clippy --fix
+    cargo build # Debug
+    cargo build --release
+
+`zlib` dependency requires that cmake is installed and in the `PATH`. For example, on MacOS you need:
+
+    export PATH="/Applications/CMake.app/Contents/bin:$PATH"
