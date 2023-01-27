@@ -39,6 +39,10 @@ Each histo includes the number of kmers with frequencies up to `--histo-max`.
 `nkmer` uses an unsigned 64 bit integer representation of kmers, where each nucleotide is encoded as two bits. This limits the length of kmers to 31,
 since k must be odd (to avoid pailindromes) and the two bits per nucleotide must fit within the integer length.
 
+## Background
+
+For an excellent summary of kmer tool optimization, see [Manekar and Sathe 2018](https://academic.oup.com/gigascience/article/7/12/giy125/5140149).
+
 ## Development
 
 Some common tasks in development:
