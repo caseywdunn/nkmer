@@ -94,6 +94,56 @@ struct Args {
     input: Vec<String>,
 }
 
+fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
+    let mut n_records_all:u64 = 0;
+    let mut n_bases_all:u64 = 0;
+
+    for file_name in input_files {
+        let mut n_records:u64 = 0;
+        let mut n_bases:u64 = 0;
+        
+        let path = Path::new(&file_name);
+        let file = File::open(path).expect("Ooops.");
+
+        let mut line_n:u64 = 0;
+
+        // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
+        // Handle gzip files with multiple blocks
+
+        let mut reader = BufReader::new(file);
+        'processing_files: loop {
+            //loop over all possible gzip members
+            match reader.fill_buf() {
+                Ok(b) => if b.is_empty() { break },
+                Err(e) => panic!("{}", e)
+            }
+        
+            //decode the next member
+            let gz = flate2::bufread::GzDecoder::new(&mut reader);
+            let block_reader = BufReader::new(gz);
+            for line in block_reader.lines() {
+                if line_n % 4 == 1 {
+                    let line = line.unwrap();
+                    n_records += 1;
+                    n_records_all += 1;
+                    if max_reads > 0 && n_records_all > max_reads {
+                        break 'processing_files;
+                    }
+                    let line_len = line.len() as u64;
+                    n_bases += line_len;
+                    n_bases_all += line_len;
+                }
+                line_n += 1;
+            }
+        
+        }
+
+        println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
+    }
+
+    (n_records_all, n_bases_all)
+}
+
 fn main() {
 
     // Ingest all command line arguments as input files
@@ -105,12 +155,16 @@ fn main() {
     assert!(args.histo_max > 0, "histo_max must be greater than 0");
     assert!(args.n > 0, "n must be greater than 0");
 
-    // Get the sequence vector
-    println!("Reading input files...");
+    // Get the sequence statistics
     let start = std::time::Instant::now();
-    
-    let mut n_records_all:u64 = 0;
-    let mut n_bases_all:u64 = 0;
+    println!("Getting input file statistics...");
+    let start = std::time::Instant::now();
+    let (n_records_all, n_bases_all) = get_fastq_stats(&args.input, args.max_reads);
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+    println!("Total records {}, total bases {}, mean read length {}", n_records_all, n_bases_all, n_bases_all as f64 / n_records_all as f64);
+
+
     let mut seqs: Vec<String>  = Vec::new();
 
     for file_name in args.input {
@@ -149,8 +203,8 @@ fn main() {
         
         }
 
-        n_records_all += n_records;
-        n_bases_all += n_bases;
+        //n_records_all += n_records;
+        //n_bases_all += n_bases;
 
         println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
     }
