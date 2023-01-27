@@ -55,6 +55,19 @@ fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
     kmers
 }
 
+fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
+    let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
+    for (_kmer, count) in counts {
+        if *count <= histo_max {
+            histo[*count as usize] += 1;
+        }
+        else {
+            histo[histo_max as usize + 1] += 1;
+        }
+    }
+    return histo;
+}
+
 fn histogram_string (histo : &Vec<u32>) -> String {
     let mut s = String::new();
     for (i, count) in histo.iter().enumerate() {
@@ -98,7 +111,7 @@ fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
     let mut n_records_all:u64 = 0;
     let mut n_bases_all:u64 = 0;
 
-    for file_name in input_files {
+    'processing_files: for file_name in input_files {
         let mut n_records:u64 = 0;
         let mut n_bases:u64 = 0;
         
@@ -109,9 +122,8 @@ fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
 
         // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
         // Handle gzip files with multiple blocks
-
         let mut reader = BufReader::new(file);
-        'processing_files: loop {
+        loop {
             //loop over all possible gzip members
             match reader.fill_buf() {
                 Ok(b) => if b.is_empty() { break },
@@ -127,6 +139,8 @@ fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
                     n_records += 1;
                     n_records_all += 1;
                     if max_reads > 0 && n_records_all > max_reads {
+                        println!("Reached maximum number of reads: {}", max_reads);
+                        println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
                         break 'processing_files;
                     }
                     let line_len = line.len() as u64;
@@ -164,18 +178,22 @@ fn main() {
     println!("Time: {} ms", (stop - start).as_millis());
     println!("Total records {}, total bases {}, mean read length {}", n_records_all, n_bases_all, n_bases_all as f64 / n_records_all as f64);
 
+    // Ingest the data and count kmers
+    let mut n_bases_processed:u64 = 0;
+    let mut n_records_processed:u64 = 0;
 
-    let mut seqs: Vec<String>  = Vec::new();
-
-    for file_name in args.input {
-        let mut n_records:u64 = 0;
-        let mut n_bases:u64 = 0;
+    let chunk_size = n_records_all / args.n as u64;
+    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
+    let start = std::time::Instant::now();
+    let mut chunk_i = 0;
+    'processing_files: for file_name in args.input {
+        let mut n_records: u64 = 0;
+        let mut n_bases: u64 = 0;
         
-        let _start = std::time::Instant::now();
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
 
-        let mut line_n:u64 = 0;
+        let mut line_n = 0;
 
         // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
         // Handle gzip files with multiple blocks
@@ -194,87 +212,44 @@ fn main() {
             for line in block_reader.lines() {
                 if line_n % 4 == 1 {
                     let line = line.unwrap();
-                    n_records += 1;
-                    n_bases += line.len() as u64;
-                    seqs.push(line);
+                    n_records_processed += 1;
+                    n_bases_processed += line.len() as u64;
+
+                    // Count the kmers
+                    let kmers = string2kmers(&line, args.k);
+                    for kmer in kmers {
+                        let count = kmer_counts.entry(kmer).or_insert(0);
+                        *count += 1;
+                    }
+
+                    // If we've processed enough records, write the output
+                    if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
+                        println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
+                        let start = std::time::Instant::now();
+                        
+                        let histo = count_histogram( &kmer_counts, args.histo_max);
+                        let out = histogram_string(&histo);
+                
+                        // Write the histogram to a file
+                        let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
+                        let out_path = Path::new(&file_name);
+                        let mut file = File::create(file_name).unwrap();
+                        file.write_all(out.as_bytes());
+
+                        chunk_i += 1;
+                    }
+
+                    if n_records_processed >= (args.n as u64 * chunk_size) {
+                        println!("  Skipping last {} reads after the last full chunk...", n_records_all - n_records_processed);
+                        break 'processing_files;
+                    }
                 }
                 line_n += 1;
             }
-        
         }
-
-        //n_records_all += n_records;
-        //n_bases_all += n_bases;
-
-        println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
     }
 
-    println!("Total processed: records {}, bases {}, mean read length {}", n_records_all, n_bases_all, n_bases_all as f64 / n_records_all as f64);
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
-
-    let chunk_size = seqs.len() / args.n;
-
-    // Count the kmers in chunks
-    println!("Counting kmers in each chunk...");
-    let start = std::time::Instant::now();
-
-    // Create a vector of hashmaps to store the counts
-    let mut kmer_counts_chunks : Vec<HashMap<u64, u64>> = Vec::new();
-
-    for part in 0..args.n{
-        let mut kmer_counts_part : HashMap<u64, u64> = HashMap::new();
-
-        let start: usize = part * chunk_size;
-        let end: usize = (part + 1) * chunk_size;
-        for seq in &seqs[start..end] {
-            let kmers_line = string2kmers(seq, args.k);
-            for kmer in kmers_line {
-                let count = kmer_counts_part.entry(kmer).or_insert(0);
-                *count += 1;
-            }
-        }
-        kmer_counts_chunks.push(kmer_counts_part);
-    }
-
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
-
-    println!("Integrating chunks...");
-    let start = std::time::Instant::now();
-    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
-
-    let mut chunk_i =0;
-    
-    let histo_max = args.histo_max;
-
-    for kmer_count_chunk in kmer_counts_chunks {
-        for (kmer, count) in kmer_count_chunk {
-            let count_total = kmer_counts.entry(kmer).or_insert(0);
-            *count_total += count;
-        }
-
-        let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-        for count in kmer_counts.values() {
-            if count <= &histo_max {
-                histo[*count as usize] += 1;
-            }
-            else {
-                histo[args.histo_max as usize + 1] += 1;
-            }
-        }
-
-        let out = histogram_string(&histo);
-
-        // Write the histogram to a file
-        let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
-        let _out_path = Path::new(&file_name);
-        let mut file = File::create(file_name).unwrap();
-        file.write_all(out.as_bytes()).map_err(|err| println!("{:?}", err)).ok();
-
-        chunk_i += 1;
-    }
-
+    println!("Total processed: records {}, bases {}", n_records_processed, n_bases_processed);
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
