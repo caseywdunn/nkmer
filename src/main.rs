@@ -234,7 +234,7 @@ fn main() {
                         let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
                         let _out_path = Path::new(&file_name);
                         let mut file = File::create(file_name).unwrap();
-                        file.write_all(out.as_bytes());
+                        file.write_all(out.as_bytes()).expect("Couldn't write output file");
 
                         chunk_i += 1;
                     }
@@ -261,7 +261,7 @@ mod tests {
     use std::collections::HashSet;
 
     // Function that takes a DNA sequence as a string and returns reverse complement
-    fn revcomp (seq : &String) -> String {
+    fn revcomp (seq : &str) -> String {
         let mut revcomp = String::new();
         for c in seq.chars().rev() {
             match c {
