@@ -6,7 +6,7 @@ use std::path::Path;
 use std::collections::HashMap;
 
 #[inline(always)]
-fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
+fn string2kmers (seq : &str, k:u32) -> Vec<u64> {
 
     // kmers are encoded as u64, with two bits per base
     // A = 00, C = 01, G = 10, T = 11
@@ -57,7 +57,7 @@ fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
 
 fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
     let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-    for (_kmer, count) in counts {
+    for count in counts.values() {
         if *count <= histo_max {
             histo[*count as usize] += 1;
         }
@@ -65,10 +65,10 @@ fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
             histo[histo_max as usize + 1] += 1;
         }
     }
-    return histo;
+    histo
 }
 
-fn histogram_string (histo : &Vec<u32>) -> String {
+fn histogram_string (histo : &[u32]) -> String {
     let mut s = String::new();
     for (i, count) in histo.iter().enumerate() {
         if i > 0 {
@@ -187,8 +187,8 @@ fn main() {
     let start = std::time::Instant::now();
     let mut chunk_i = 0;
     'processing_files: for file_name in args.input {
-        let mut n_records: u64 = 0;
-        let mut n_bases: u64 = 0;
+        let _n_records: u64 = 0;
+        let _n_bases: u64 = 0;
         
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
@@ -225,14 +225,14 @@ fn main() {
                     // If we've processed enough records, write the output
                     if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
                         println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
-                        let start = std::time::Instant::now();
+                        let _start = std::time::Instant::now();
                         
                         let histo = count_histogram( &kmer_counts, args.histo_max);
                         let out = histogram_string(&histo);
                 
                         // Write the histogram to a file
                         let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
-                        let out_path = Path::new(&file_name);
+                        let _out_path = Path::new(&file_name);
                         let mut file = File::create(file_name).unwrap();
                         file.write_all(out.as_bytes());
 
