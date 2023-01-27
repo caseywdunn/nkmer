@@ -234,83 +234,39 @@ fn main() {
     let start = std::time::Instant::now();
     let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
 
+    let mut chunk_i =0;
+    
+    let histo_max = args.histo_max;
+
     for kmer_count_chunk in kmer_counts_chunks {
         for (kmer, count) in kmer_count_chunk {
             let count_total = kmer_counts.entry(kmer).or_insert(0);
             *count_total += count;
         }
-    }
 
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
-    
-    /* 
-
-        let mut reader = BufReader::new(file);
-        loop {
-            //loop over all possible gzip members
-            match reader.fill_buf() {
-                Ok(b) => if b.is_empty() { break },
-                Err(e) => panic!("{}", e)
+        let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
+        for (_kmer, count) in &kmer_counts {
+            if count <= &histo_max {
+                histo[*count as usize] += 1;
             }
-        
-            //decode the next member
-            let gz = flate2::bufread::GzDecoder::new(&mut reader);
-            let block_reader = BufReader::new(gz);
-            for line in block_reader.lines() {
-                if line_n % 4 == 1 {
-                    let line = line.unwrap();
-                    n_records_processed += 1;
-                    n_bases_processed += line.len() as u64;
-
-                    // Count the kmers
-                    let kmers = string2kmers(&line, args.k);
-                    for kmer in kmers {
-                        let count = kmer_counts.entry(kmer).or_insert(0);
-                        *count += 1;
-                    }
-
-                    // If we've processed enough records, write the output
-                    if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
-                        println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
-                        let start = std::time::Instant::now();
-                        
-                        //let histo = count_histogram( &kmer_counts, args.histo_max);
-
-                        let mut histo : Vec<u32> = vec![0; args.histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-                        for (_kmer, count) in kmer_counts {
-                            if count <= args.histo_max {
-                                histo[count as usize] += 1;
-                            }
-                            else {
-                                histo[args.histo_max as usize + 1] += 1;
-                            }
-                        }
-
-                        let out = histogram_string(&histo);
-                
-                        // Write the histogram to a file
-                        let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
-                        let out_path = Path::new(&file_name);
-                        let mut file = File::create(file_name).unwrap();
-                        file.write_all(out.as_bytes());
-
-                        chunk_i += 1;
-
-                        if chunk_i >= args.n {
-                            break 'processing_files;
-                        }
-                    }
-                }
-                line_n += 1;
+            else {
+                histo[args.histo_max as usize + 1] += 1;
             }
         }
+
+        let out = histogram_string(&histo);
+
+        // Write the histogram to a file
+        let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
+        let out_path = Path::new(&file_name);
+        let mut file = File::create(file_name).unwrap();
+        file.write_all(out.as_bytes());
+
+        chunk_i += 1;
     }
 
-    println!("Total processed: records {}, bases {}", n_records_processed, n_bases_processed);
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
-    */
 
 }
 
@@ -355,7 +311,6 @@ mod tests {
         let kmers_r = string2kmers(&revcomp(&seq), 3);
         // let kmers_r = string2kmers(&String::from("ACTGCTNCGTT"), 3); // This should fail
 
-
         // Check that the kmers are the same
         // Convert the kmers to hash sets
         let kmers_f_set: HashSet<u64> = kmers_f.iter().cloned().collect();
@@ -363,7 +318,5 @@ mod tests {
 
         // Check that the sets are equal
         assert_eq!(kmers_f_set, kmers_r_set);
-
-
     }
 }

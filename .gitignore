@@ -15,4 +15,4 @@ Cargo.lock
 
 # Project specific
 
-/sample*
+*.histo
