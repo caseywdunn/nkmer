@@ -237,25 +237,78 @@ fn get_kmer_vector(input_files : &Vec<String>, k : u32) -> (Vec<u64>, u64, u64) 
 fn main() {
 
     // Ingest all command line arguments as input files
-    //let args: Vec<String> = std::env::args().collect();
     let args = Args::parse();
 
     assert!(args.k < 32, "k must be less than 32 due to use of 64 bit integers to encode kmers");
+    assert!(args.k > 0, "k must be greater than 0");
+    assert!(args.k % 2 == 1, "k must be odd");
+    assert!(args.histo_max > 0, "histo_max must be greater than 0");
+    assert!(args.n > 0, "n must be greater than 0");
 
     let mut kmers : Vec<u64> = Vec::new();
     let mut n_records_processed:u64 = 0;
     let mut n_bases_processed:u64 = 0;
 
-    // Get the kmer vector
+    // Get the sequence vector
     println!("Reading input files...");
     let start = std::time::Instant::now();
-    (kmers, n_records_processed, n_bases_processed) = get_kmer_vector(&args.input, args.k);
-    let n_kmers : u32 = kmers.len() as u32; 
-    println!("Total processed: records {}, bases {}, kmers {}", n_records_processed, n_bases_processed, n_kmers);
+    
+    let mut n_records_all:u64 = 0;
+    let mut n_bases_all:u64 = 0;
+    let mut seqs: Vec<String>  = Vec::new();
+
+    for file_name in args.input {
+        let mut n_records:u64 = 0;
+        let mut n_bases:u64 = 0;
+        
+        let start = std::time::Instant::now();
+        let path = Path::new(&file_name);
+        let file = File::open(path).expect("Ooops.");
+
+        let mut line_n:u64 = 0;
+
+        // From https://github.com/rust-lang/flate2-rs/issues/41#issuecomment-219058833
+        // Handle gzip files with multiple blocks
+
+        let mut reader = BufReader::new(file);
+        loop {
+            //loop over all possible gzip members
+            match reader.fill_buf() {
+                Ok(b) => if b.is_empty() { break },
+                Err(e) => panic!("{}", e)
+            }
+        
+            //decode the next member
+            let gz = flate2::bufread::GzDecoder::new(&mut reader);
+            let block_reader = BufReader::new(gz);
+            for line in block_reader.lines() {
+                if line_n % 4 == 1 {
+                    let line = line.unwrap();
+                    n_records += 1;
+                    n_bases += line.len() as u64;
+                    seqs.push(line);
+                }
+                line_n += 1;
+            }
+        
+        }
+
+        n_records_all += n_records;
+        n_bases_all += n_bases;
+
+        println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
+    }
+
+
+    println!("Total processed: records {}, bases {}, mean read length {}", n_records_all, n_bases_all, n_bases_all as f64 / n_records_all as f64);
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
-
+    // Count the kmers
+    for seq in seqs {
+        let mut kmers_line = string2kmers(&seq, args.k);
+        kmers.append(&mut kmers_line);
+    }
 
     // Standard hash map
     println!("");
@@ -270,6 +323,7 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+    /* 
     // Standard hash map with set for unique kmers
     println!("");
     println!("Standard hashmap with set for unique kmers...");
@@ -289,6 +343,7 @@ fn main() {
     }
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
+    */
 
     /* 
     // Now way to insert indices out of order?
@@ -307,6 +362,7 @@ fn main() {
     println!("Time: {} ms", (stop - start).as_millis());
     */
 
+    /* 
     // Radix sort and count
     println!("");
     println!("Radix sort and count...");
@@ -353,11 +409,6 @@ fn main() {
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
-
-
-    
-
-
     // Divide and conquer
     println!("");
     println!("Divide and conquer...");
@@ -391,7 +442,8 @@ fn main() {
     }
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
-    
+    */
+    /* 
     // DashMap
     println!("");
     println!("DashMap...");
@@ -441,6 +493,7 @@ fn main() {
     }
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
+    */
 
     /* 
     // NoHash hash map
