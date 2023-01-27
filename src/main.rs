@@ -145,10 +145,6 @@ fn main() {
     assert!(args.histo_max > 0, "histo_max must be greater than 0");
     assert!(args.n > 0, "n must be greater than 0");
 
-    let mut kmers : Vec<u64> = Vec::new();
-    let mut n_records_processed:u64 = 0;
-    let mut n_bases_processed:u64 = 0;
-
     // Get the sequence vector
     println!("Reading input files...");
     let start = std::time::Instant::now();
@@ -245,7 +241,7 @@ fn main() {
         }
 
         let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-        for (_kmer, count) in &kmer_counts {
+        for count in kmer_counts.values() {
             if count <= &histo_max {
                 histo[*count as usize] += 1;
             }
@@ -260,7 +256,7 @@ fn main() {
         let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
         let out_path = Path::new(&file_name);
         let mut file = File::create(file_name).unwrap();
-        file.write_all(out.as_bytes());
+        file.write_all(out.as_bytes()).map_err(|err| println!("{:?}", err)).ok();
 
         chunk_i += 1;
     }
