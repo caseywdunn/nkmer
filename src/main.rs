@@ -205,15 +205,13 @@ fn main() {
 
     let chunk_size = seqs.len() / args.n;
 
-    // Count the kmers
-    println!("Counting kmers...");
+    // Count the kmers in chunks
+    println!("Counting kmers in each chunk...");
     let start = std::time::Instant::now();
 
     // Create a vector of hashmaps to store the counts
-    //let mut kmer_counts : Vec<HashMap<u64, u64>> = Vec::new();
+    let mut kmer_counts_chunks : Vec<HashMap<u64, u64>> = Vec::new();
 
-
-    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
     for part in 0..args.n{
         let mut kmer_counts_part : HashMap<u64, u64> = HashMap::new();
 
@@ -226,12 +224,21 @@ fn main() {
                 *count += 1;
             }
         }
-        // Add the counts in the part to the total
-        for (kmer, count) in kmer_counts_part {
+        kmer_counts_chunks.push(kmer_counts_part);
+    }
+
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    println!("Integrating chunks...");
+    let start = std::time::Instant::now();
+    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
+
+    for kmer_count_chunk in kmer_counts_chunks {
+        for (kmer, count) in kmer_count_chunk {
             let count_total = kmer_counts.entry(kmer).or_insert(0);
             *count_total += count;
         }
-
     }
 
     let stop = std::time::Instant::now();
