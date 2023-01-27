@@ -27,29 +27,32 @@ fn string2kmers (seq : &str, k:u32) -> Vec<u64> {
             'N' => 4,
              _  => 5,
         };
-        if base < 4 {
-            frame = (frame << 2) | base;
 
-            revframe = (revframe >> 2) | ((3 - base) << (2*(k-1)));
+        match base {
+            0 | 1 | 2 | 3 => {
+                frame = (frame << 2) | base;
 
-            n_valid += 1;
-            if n_valid >= k {
-
-                let forward = frame & mask;
-                let reverse = revframe & mask;
-
-                if forward < reverse {
-                    kmers.push(forward);
-                } else {
-                    kmers.push(reverse);
+                revframe = (revframe >> 2) | ((3 - base) << (2*(k-1)));
+    
+                n_valid += 1;
+                if n_valid >= k {
+    
+                    let forward = frame & mask;
+                    let reverse = revframe & mask;
+    
+                    if forward < reverse {
+                        kmers.push(forward);
+                    } else {
+                        kmers.push(reverse);
+                    }
                 }
-            }
-        } else if base==4 {
-            frame = 0;
-            revframe = 0;
-            n_valid = 0;
-        } else {
-            panic!("Invalid base: {}", c);
+            },
+            4 => {
+                frame = 0;
+                revframe = 0;
+                n_valid = 0;
+            },
+            _ => panic!("Invalid base: {}", c),
         }
     }
     kmers
