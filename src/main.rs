@@ -239,6 +239,14 @@ fn main() {
                         let mut file = File::create(file_name).unwrap();
                         file.write_all(out.as_bytes()).expect("Couldn't write output file");
 
+                        // Write the stats to a file
+                        let file_stats_name =  &format!("{output}_k{k}_part{chunk_i}.stats.tsv", output=args.output, k=args.k);
+                        let mut file_stats = File::create(file_stats_name).unwrap();
+                        writeln!(&mut file_stats, "sample	fastq_index	mean_readlen	num_reads	gigabases").unwrap();
+                        writeln!(&mut file_stats, "{}   {}  {}  {}  {}", args.output, chunk_i, n_bases_processed/n_records_processed, n_records_processed, n_bases_processed as f64 / 1_000_000_000.).unwrap();
+                        //let stats_text = format!("sample	fastq_index	mean_readlen	num_reads	gigabases\n{}   {}  {}  {}  {}", args.output, chunk_i, n_bases_processed/n_records_processed, n_records_processed, n_bases_processed as f64 / 1_000_000_000.);
+                        //file_stats.write_all(stats_text.as_bytes()).expect("Couldn't write output file");
+
                         chunk_i += 1;
                     }
 
