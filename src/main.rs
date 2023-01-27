@@ -1,36 +1,13 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
-use flate2::read::GzDecoder;
+
 use clap::Parser;
 use std::path::Path;
-use std::collections::HashSet;
+
 use std::collections::HashMap;
 
-// Function that takes a DNA sequence as a string and returns reverse complement
-fn revcomp (seq : &String) -> String {
-    let mut revcomp = String::new();
-    for c in seq.chars().rev() {
-        match c {
-            'A' => revcomp.push('T'),
-            'C' => revcomp.push('G'),
-            'G' => revcomp.push('C'),
-            'T' => revcomp.push('A'),
-            'N' => revcomp.push('N'),
-            _ => panic!("Invalid base: {}", c),
-        }
-    }
-    revcomp
-}
 
-fn kmer_revcomp (kmer : u64, k:u32) -> u64 {
-    let mut revcomp = 0;
-    for i in 0..k {
-        let base = (kmer >> (2*i)) & 3;
-        revcomp = (revcomp << 2) | (3 - base);
-    }
-    revcomp
-}
 
 #[inline(always)]
 fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
@@ -80,19 +57,6 @@ fn string2kmers (seq : &String, k:u32) -> Vec<u64> {
         }
     }
     kmers
-}
-
-fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
-    let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-    for (_kmer, count) in counts {
-        if *count <= histo_max {
-            histo[*count as usize] += 1;
-        }
-        else {
-            histo[histo_max as usize + 1] += 1;
-        }
-    }
-    histo
 }
 
 fn histogram_string (histo : &Vec<u32>) -> String {
@@ -157,7 +121,7 @@ fn main() {
         let mut n_records:u64 = 0;
         let mut n_bases:u64 = 0;
         
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
 
@@ -214,7 +178,7 @@ fn main() {
         let start: usize = part * chunk_size;
         let end: usize = (part + 1) * chunk_size;
         for seq in &seqs[start..end] {
-            let mut kmers_line = string2kmers(&seq, args.k);
+            let kmers_line = string2kmers(seq, args.k);
             for kmer in kmers_line {
                 let count = kmer_counts_part.entry(kmer).or_insert(0);
                 *count += 1;
@@ -254,7 +218,7 @@ fn main() {
 
         // Write the histogram to a file
         let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
-        let out_path = Path::new(&file_name);
+        let _out_path = Path::new(&file_name);
         let mut file = File::create(file_name).unwrap();
         file.write_all(out.as_bytes()).map_err(|err| println!("{:?}", err)).ok();
 
@@ -269,6 +233,23 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    // Function that takes a DNA sequence as a string and returns reverse complement
+    fn revcomp (seq : &String) -> String {
+        let mut revcomp = String::new();
+        for c in seq.chars().rev() {
+            match c {
+                'A' => revcomp.push('T'),
+                'C' => revcomp.push('G'),
+                'G' => revcomp.push('C'),
+                'T' => revcomp.push('A'),
+                'N' => revcomp.push('N'),
+                _ => panic!("Invalid base: {}", c),
+            }
+        }
+        revcomp
+    }
 
     #[test]
     fn test_tests(){
