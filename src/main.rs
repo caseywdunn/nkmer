@@ -156,7 +156,7 @@ fn main() {
     assert!(args.n > 0, "n must be greater than 0");
 
     // Get the sequence statistics
-    let start = std::time::Instant::now();
+    let _start = std::time::Instant::now();
     println!("Getting input file statistics...");
     let start = std::time::Instant::now();
     let (n_records_all, n_bases_all) = get_fastq_stats(&args.input, args.max_reads);
