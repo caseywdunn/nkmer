@@ -199,63 +199,41 @@ fn main() {
         println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
     }
 
-
     println!("Total processed: records {}, bases {}, mean read length {}", n_records_all, n_bases_all, n_bases_all as f64 / n_records_all as f64);
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
 
+    let chunk_size = seqs.len() / args.n;
+
     // Count the kmers
-    for seq in seqs {
-        let mut kmers_line = string2kmers(&seq, args.k);
-        kmers.append(&mut kmers_line);
-    }
-
-    // Standard hash map
-    println!("");
-    println!("Standard hashmap...");
-    let kmers0 = kmers.clone();
-    let start = std::time::Instant::now();
-    let mut kmer_counts_HashMap : HashMap<u64, u64> = HashMap::new();
-    for kmer in kmers0 {
-        let count = kmer_counts_HashMap.entry(kmer).or_insert(0);
-        *count += 1;
-    }
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
-
-    
-
-    // Divide and conquer
-    println!("");
-    println!("Divide and conquer...");
-
-    let kmers4 = kmers.clone();
+    println!("Counting kmers...");
     let start = std::time::Instant::now();
 
-    let parts: usize = 50000;
-    let mut kmer_counts_dc : HashMap<u64, u64> = HashMap::new();
-    let n_k : usize = kmers4.len() / parts;
-    for part in 0..=parts{
+    // Create a vector of hashmaps to store the counts
+    //let mut kmer_counts : Vec<HashMap<u64, u64>> = Vec::new();
+
+
+    let mut kmer_counts : HashMap<u64, u64> = HashMap::new();
+    for part in 0..args.n{
         let mut kmer_counts_part : HashMap<u64, u64> = HashMap::new();
-        if part < parts {
-            let start: usize = part * n_k / parts;
-            let end: usize = (part + 1) * n_k / parts;
-            for kmer in &kmers4[start..end] {
-                let count = kmer_counts_part.entry(*kmer).or_insert(0);
+
+        let start: usize = part * chunk_size;
+        let end: usize = (part + 1) * chunk_size;
+        for seq in &seqs[start..end] {
+            let mut kmers_line = string2kmers(&seq, args.k);
+            for kmer in kmers_line {
+                let count = kmer_counts_part.entry(kmer).or_insert(0);
                 *count += 1;
             }
         }
         // Add the counts in the part to the total
         for (kmer, count) in kmer_counts_part {
-            let count_total = kmer_counts_dc.entry(kmer).or_insert(0);
+            let count_total = kmer_counts.entry(kmer).or_insert(0);
             *count_total += count;
         }
 
     }
-    for kmer in kmers4 {
-        let count = kmer_counts_HashMap.entry(kmer).or_insert(0);
-        *count += 1;
-    }
+
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
     
