@@ -4,6 +4,8 @@ use std::io::prelude::*;
 use clap::Parser;
 use std::path::Path;
 use std::collections::HashMap;
+use nalgebra::{DMatrix, DVector};
+
 
 #[inline(always)]
 fn string2kmers (seq : &str, k:u32) -> Vec<u64> {
@@ -58,8 +60,8 @@ fn string2kmers (seq : &str, k:u32) -> Vec<u64> {
     kmers
 }
 
-fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
-    let mut histo : Vec<u32> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
+fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u64> {
+    let mut histo : Vec<u64> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
     for count in counts.values() {
         if *count <= histo_max {
             histo[*count as usize] += 1;
@@ -71,7 +73,7 @@ fn count_histogram (counts : &HashMap<u64, u64>, histo_max : u64) -> Vec<u32> {
     histo
 }
 
-fn histogram_string (histo : &[u32]) -> String {
+fn histogram_string (histo : &[u64]) -> String {
     let mut s = String::new();
     for (i, count) in histo.iter().enumerate() {
         if i > 0 {
@@ -132,7 +134,6 @@ fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
     (n_records_all, n_bases_all)
 }
 
-
 /// Count k-mers in a set of fastq.gz files, with an option to assess cumulative subsets
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -184,6 +185,14 @@ fn main() {
     assert!(args.k % 2 == 1, "k must be odd");
     assert!(args.histo_max > 0, "histo_max must be greater than 0");
     assert!(args.n > 0, "n must be greater than 0");
+
+    // Set up matrices and vectors for the results
+    // Matrix with one row for each cumulative subset and columns for histogram values
+    let mut histo_chunks = DMatrix::<u64>::zeros(args.n, args.histo_max as usize + 2);
+
+    // DVector with one u64 element for each cumulative subset
+    let mut n_bases_chunks = DVector::<u64>::zeros(args.n);
+    let mut n_records_chunks = DVector::<u64>::zeros(args.n);
 
     // Get the sequence statistics
     println!("Getting input file statistics...");
@@ -241,6 +250,13 @@ fn main() {
                         
                         let histo = count_histogram( &kmer_counts, args.histo_max);
                         let histo_text = histogram_string(&histo);
+
+                        // Update matrices and vectors
+                        // Create a row vector from the histogram
+                        let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
+                        histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
+                        n_bases_chunks[chunk_i] = n_bases_processed;
+                        n_records_chunks[chunk_i] = n_records_processed;
                 
                         // Write the histogram to a file
                         let file_histo_name =  &format!("{out_name}_k{k}_part{chunk_i}.histo", k=args.k);
