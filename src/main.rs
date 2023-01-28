@@ -81,35 +81,6 @@ fn histogram_string (histo : &[u32]) -> String {
     s
 }
 
-/// Count k-mers in a set of fastq.gz files, with an option to assess cumulative subsets
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// k-mer length
-    #[arg(short, default_value_t = 21)]
-    k: u32,
-
-    /// Maximum value for histogram
-    #[arg(long, default_value_t = 10000)]
-    histo_max: u64,
-
-    /// Number of chunks to divide the data into
-    #[arg(long, default_value_t = 10)]
-    n: usize,
-
-    /// Maximum number of reads to process
-    #[arg(short, long, default_value_t = 0)]
-    max_reads: u64,
-
-    /// Name used for analysis output
-    #[arg(short, long, default_value_t = String::from("sample") )]
-    output: String,
-
-    /// Input files, gzipped fastq
-    #[arg(required = true)]
-    input: Vec<String>,
-}
-
 fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
     let mut n_records_all:u64 = 0;
     let mut n_bases_all:u64 = 0;
@@ -161,11 +132,53 @@ fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
     (n_records_all, n_bases_all)
 }
 
+
+/// Count k-mers in a set of fastq.gz files, with an option to assess cumulative subsets
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// k-mer length
+    #[arg(short, default_value_t = 21)]
+    k: u32,
+
+    /// Maximum value for histogram
+    #[arg(long, default_value_t = 10000)]
+    histo_max: u64,
+
+    /// Number of chunks to divide the data into
+    #[arg(short, default_value_t = 10)]
+    n: usize,
+
+    /// Maximum number of reads to process
+    #[arg(short, long, default_value_t = 0)]
+    max_reads: u64,
+
+    /// Directory and filename prefix for analysis output, for example out_dir/Nanomia-bijuga
+    #[arg(short, long, default_value_t = String::from("sample") )]
+    output: String,
+
+    /// Input files, gzipped fastq
+    #[arg(required = true)]
+    input: Vec<String>,
+}
+
 fn main() {
 
-    // Ingest all command line arguments as input files
+    // Ingest command line arguments
     let args = Args::parse();
 
+    // Print the program name and version
+    println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+    // Print the arguments
+    println!("{:?}", args);
+
+    // Parse the output path and create directories if necessary
+    let path = Path::new(&args.output);
+    let out_name = path.file_name().unwrap().to_str().unwrap(); // This is the prefix of the output files
+    let directory = path.parent().unwrap().to_str().unwrap();
+    let _ = std::fs::create_dir_all(directory);
+
+    // Check that the arguments are valid
     assert!(args.k < 32, "k must be less than 32 due to use of 64 bit integers to encode kmers");
     assert!(args.k > 0, "k must be greater than 0");
     assert!(args.k % 2 == 1, "k must be odd");
@@ -173,7 +186,6 @@ fn main() {
     assert!(args.n > 0, "n must be greater than 0");
 
     // Get the sequence statistics
-    let _start = std::time::Instant::now();
     println!("Getting input file statistics...");
     let start = std::time::Instant::now();
     let (n_records_all, n_bases_all) = get_fastq_stats(&args.input, args.max_reads);
@@ -190,8 +202,6 @@ fn main() {
     let start = std::time::Instant::now();
     let mut chunk_i = 0;
     'processing_files: for file_name in args.input {
-        let _n_records: u64 = 0;
-        let _n_bases: u64 = 0;
         
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
@@ -228,24 +238,22 @@ fn main() {
                     // If we've processed enough records, write the output
                     if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
                         println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
-                        let _start = std::time::Instant::now();
                         
                         let histo = count_histogram( &kmer_counts, args.histo_max);
-                        let out = histogram_string(&histo);
+                        let histo_text = histogram_string(&histo);
                 
                         // Write the histogram to a file
-                        let file_name =  &format!("{output}_k{k}_part{chunk_i}.histo", output=args.output, k=args.k);
-                        let _out_path = Path::new(&file_name);
-                        let mut file = File::create(file_name).unwrap();
-                        file.write_all(out.as_bytes()).expect("Couldn't write output file");
+                        let file_histo_name =  &format!("{out_name}_k{k}_part{chunk_i}.histo", k=args.k);
+                        let file_histo_path = Path::new(directory).join(file_histo_name);
+                        let mut file = File::create(file_histo_path).unwrap();
+                        file.write_all(histo_text.as_bytes()).expect("Couldn't write output file");
 
                         // Write the stats to a file
-                        let file_stats_name =  &format!("{output}_k{k}_part{chunk_i}.stats.tsv", output=args.output, k=args.k);
-                        let mut file_stats = File::create(file_stats_name).unwrap();
+                        let file_stats_name =  &format!("{out_name}_k{k}_part{chunk_i}.stats.tsv", k=args.k);
+                        let file_stats_path = Path::new(directory).join(file_stats_name);
+                        let mut file_stats = File::create(file_stats_path).unwrap();
                         writeln!(&mut file_stats, "sample	fastq_index	mean_readlen	num_reads	gigabases").unwrap();
-                        writeln!(&mut file_stats, "{}   {}  {}  {}  {}", args.output, chunk_i, n_bases_processed/n_records_processed, n_records_processed, n_bases_processed as f64 / 1_000_000_000.).unwrap();
-                        //let stats_text = format!("sample	fastq_index	mean_readlen	num_reads	gigabases\n{}   {}  {}  {}  {}", args.output, chunk_i, n_bases_processed/n_records_processed, n_records_processed, n_bases_processed as f64 / 1_000_000_000.);
-                        //file_stats.write_all(stats_text.as_bytes()).expect("Couldn't write output file");
+                        writeln!(&mut file_stats, "{}   {}  {}  {}  {}", out_name, chunk_i, n_bases_processed/n_records_processed, n_records_processed, n_bases_processed as f64 / 1_000_000_000.).unwrap();
 
                         chunk_i += 1;
                     }
