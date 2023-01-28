@@ -114,7 +114,7 @@ fn get_fastq_stats(input_files : &Vec<String>, max_reads : u64) -> (u64, u64){
                     let line = line.unwrap();
                     n_records += 1;
                     n_records_all += 1;
-                    if max_reads > 0 && n_records_all > max_reads {
+                    if max_reads > 0 && n_records_all == max_reads {
                         println!("Reached maximum number of reads: {}", max_reads);
                         println!("File {}: records {}, bases {}, mean read length {}", file_name, n_records, n_bases, n_bases as f64 / n_records as f64);
                         break 'processing_files;
