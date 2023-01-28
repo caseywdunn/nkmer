@@ -251,12 +251,11 @@ fn main() {
                         let histo = count_histogram( &kmer_counts, args.histo_max);
                         let histo_text = histogram_string(&histo);
 
-                        // Update matrices and vectors
-                        // Create a row vector from the histogram
-                        let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
-                        histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
-                        n_bases_chunks[chunk_i] = n_bases_processed;
-                        n_records_chunks[chunk_i] = n_records_processed;
+                        // Copy histo into histo_chunks row
+                        // let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
+                        // histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
+                        // n_bases_chunks[chunk_i] = n_bases_processed;
+                        // n_records_chunks[chunk_i] = n_records_processed;
                 
                         // Write the histogram to a file
                         let file_histo_name =  &format!("{out_name}_k{k}_part{chunk_i}.histo", k=args.k);
