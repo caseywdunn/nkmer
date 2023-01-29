@@ -4,6 +4,7 @@
 	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
+
 		{
 			"type": "lldb",
 			"request": "launch",
@@ -19,7 +20,7 @@
 					"kind": "bin"
 				}
 			},
-			"args": [],
+			"args": ["-k", "21", "-n", "10", "--histo-max", "20", "data/SRR5324768_pass_1.fastq.gz"],
 			"cwd": "${workspaceFolder}"
 		},
 		{
