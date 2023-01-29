@@ -50,6 +50,7 @@ Some common tasks in development:
     cargo test
     cargo clippy
     cargo clippy --fix
+    cargo fmt
     cargo build # Debug
     cargo build --release
 
