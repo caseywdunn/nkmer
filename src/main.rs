@@ -5,6 +5,35 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
+use plotters::prelude::*;
+
+fn plot_histogram(data: &Vec<i64>, filename: &str) {
+    // Create a new drawing area
+    let root = BitMapBackend::new("plot.png", (640, 480)).unwrap().into_drawing_area();
+    root.fill(&WHITE).unwrap();
+
+    // Create the x and y axis scales
+    let mut chart = ChartBuilder::on(&root)
+        .caption("Vector Plot", ("sans-serif", 20).into_font())
+        .build_cartesian_2d(-data.len() as i32..data.len() as i32, -(*data.iter().max().unwrap())..*data.iter().max().unwrap())
+        .unwrap();
+
+    // Plot the data
+    chart
+        .draw_series(data.iter().enumerate().map(|(x, y)| {
+            (x as i32, *y)
+        }))
+        .unwrap()
+        .label("Vector Plot")
+        .color(BLUE)
+        .point_style(Circle(5));
+
+    // Save the plot to a file
+    chart.save(filename).unwrap();
+}
+
+
+
 
 #[inline(always)]
 fn string2kmers(seq: &str, k: u32) -> Vec<u64> {
@@ -273,10 +302,12 @@ fn main() {
                         let histo_text = histogram_string(&histo);
 
                         // Copy histo into histo_chunks row
-                        // let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
-                        // histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
-                        // n_bases_chunks[chunk_i] = n_bases_processed;
-                        // n_records_chunks[chunk_i] = n_records_processed;
+                        //let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
+                        //histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
+                        let mut row = histo_chunks.row_mut(chunk_i);
+                        row.copy_from_slice(&histo);
+                        n_bases_chunks[chunk_i] = n_bases_processed;
+                        n_records_chunks[chunk_i] = n_records_processed;
 
                         // Write the histogram to a file
                         let file_histo_name =
@@ -307,6 +338,14 @@ fn main() {
                         )
                         .unwrap();
 
+                        // Write the histogram plot to a file
+                        let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png", k = args.k),
+                        let file_plot_path = Path::new(directory).join(plot_name);
+                        plot_histogram(
+                            &histo,
+                            &file_plot_path,
+                        );
+
                         chunk_i += 1;
                     }
 
@@ -329,6 +368,10 @@ fn main() {
     );
     let stop = std::time::Instant::now();
     println!("Time: {} ms", (stop - start).as_millis());
+
+    drop(kmer_counts);
+
+
 }
 
 #[cfg(test)]
