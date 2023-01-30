@@ -8,7 +8,7 @@ Download and install [Rust and Cargo](https://www.rust-lang.org/tools/install).
 
 Then, in this repo build the binary:
 
-    cargo build
+    cargo build --release
 
 The executable is then at `target/debug/nkmer`
 
@@ -57,3 +57,7 @@ Some common tasks in development:
 `zlib` dependency requires that cmake is installed and in the `PATH`. For example, on MacOS you need:
 
     export PATH="/Applications/CMake.app/Contents/bin:$PATH"
+
+### Test data
+
+This repository includes a test [dataset from Thermus thermophilus](https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR5324768&display=metadata) to develop against.
