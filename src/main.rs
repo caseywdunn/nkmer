@@ -1,5 +1,5 @@
 use clap::Parser;
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{Matrix, DMatrix, DVector};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -7,7 +7,11 @@ use std::io::BufReader;
 use std::path::Path;
 use plotters::prelude::*;
 
-fn plot_histogram(data: &Vec<i64>, filename: &str) {
+// Takes a Matrix of u64 and prints its dimensions
+
+
+
+fn plot_histogram(histo_chunks: &Matrix<u64>, n_bases_chunks: &Matrix<u64>, n_records_chunks: &Matrix<u64>, k: u32, &directory: &str) {
     // Create a new drawing area
     let root = BitMapBackend::new("plot.png", (640, 480)).unwrap().into_drawing_area();
     root.fill(&WHITE).unwrap();
@@ -342,8 +346,11 @@ fn main() {
                         let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png", k = args.k),
                         let file_plot_path = Path::new(directory).join(plot_name);
                         plot_histogram(
-                            &histo,
-                            &file_plot_path,
+                            histo_chunks,
+                            n_bases_chunks,
+                            n_records_chunks,
+                            k,
+                            &directory,
                         );
 
                         chunk_i += 1;
