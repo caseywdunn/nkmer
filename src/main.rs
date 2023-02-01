@@ -1,6 +1,7 @@
 use clap::Parser;
 use ndarray::{Array1, Array2};
 use plotters::prelude::*;
+use find_peaks::PeakFinder;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -24,6 +25,14 @@ fn infer_stats(
     let histo_64 = histo_chunks.row(chunk_i as usize).to_vec();
     let histo = histo_64.iter().map(|v| *v as i32).collect::<Vec<i32>>();
 
+    // Find the peaks in the histogram
+    let mut peak_finder = PeakFinder::new(&histo);
+    peak_finder.with_min_prominence(200);
+    peak_finder.with_min_height(10);
+    let peaks = peak_finder.find_peaks();
+    println!("Peaks: {:?}", peaks);
+
+
     // Get the max value of the histogram
     let hist_max = histo[2..].iter().max().unwrap();
     let y_max = (*hist_max as f64 * 1.1) as i32;
@@ -46,7 +55,7 @@ fn infer_stats(
     ctx.draw_series((0..).zip(histo.iter()).map(|(x, y)| {
         let x0 = SegmentValue::Exact(x);
         let x1 = SegmentValue::Exact(x + 1);
-        let mut bar = Rectangle::new([(x0, 0), (x1, *y)], RED.filled());
+        let mut bar = Rectangle::new([(x0, 0), (x1, *y)], CYAN.filled());
         bar.set_margin(0, 0, 5, 5);
         bar
     }))

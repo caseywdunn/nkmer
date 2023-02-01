@@ -12,3 +12,4 @@ flate2 = { version = "1.0.17", features = ["zlib-ng"], default-features = false 
 clap = { version = "*", features = ["derive"]}
 ndarray = "*"
 plotters = "*"
+find_peaks = "*"
