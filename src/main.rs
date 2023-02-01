@@ -74,7 +74,7 @@ fn string2kmers(seq: &str, k: u32) -> Vec<u64> {
     let mut frame: u64 = 0; // read the bits for each base into the least significant end of this integer
     let mut revframe: u64 = 0; // read the bits for complement into the least significant end of this integer
     let mut n_valid = 0; // number of valid bases in the frame
-    for (_i, c) in seq.chars().enumerate() {
+    for c in seq.chars() {
         let base = match c {
             'A' => 0,
             'C' => 1,
