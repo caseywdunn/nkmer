@@ -20,7 +20,7 @@
 					"kind": "bin"
 				}
 			},
-			"args": ["-k", "21", "-n", "10", "--histo-max", "10000", "-o", "Thermus-thermophilus", "data/SRR5324768_pass_1.fastq.gz"],
+			"args": ["-k", "21", "-n", "10", "--histo-max", "10000", "-o", "Thermus-thermophilus_output/Thermus-thermophilus", "data/SRR5324768_pass_1.fastq.gz"],
 			"cwd": "${workspaceFolder}"
 		},
 		{
