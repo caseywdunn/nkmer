@@ -13,3 +13,5 @@ clap = { version = "*", features = ["derive"]}
 ndarray = "*"
 plotters = "*"
 find_peaks = "*"
+csv = "*"
+ndarray-csv = "*"

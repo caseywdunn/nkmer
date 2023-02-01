@@ -7,6 +7,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
+use csv::WriterBuilder;
+use ndarray_csv::Array2Writer;
 
 // Takes a Matrix of u64 and prints its dimensions
 
@@ -322,7 +324,9 @@ fn main() {
 
                     // If we've processed enough records, write the output
                     if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
-                        println!("Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
+                        println!(
+                            "Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", 
+                            chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
 
                         let histo = count_histogram(&kmer_counts, args.histo_max);
                         let histo_text = histogram_string(&histo);
@@ -400,6 +404,17 @@ fn main() {
     println!("Time: {} ms", (stop - start).as_millis());
 
     drop(kmer_counts);
+
+    // Write histo_chunks to a file
+    let histo_file_name = &format!("{out_name}_k{k}_histo.csv", k = args.k);
+    let histo_file_path = Path::new(&directory).join(histo_file_name);
+    
+    {
+        let file = File::create(histo_file_path).unwrap();
+        let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
+        writer.serialize_array2(&histo_chunks).unwrap();
+    }
+
 }
 
 #[cfg(test)]

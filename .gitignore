@@ -22,3 +22,4 @@ Cargo.lock
 *.histo
 *.histo.png
 *.stats.tsv
+*output/*
