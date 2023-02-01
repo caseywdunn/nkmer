@@ -1,43 +1,44 @@
 use clap::Parser;
-use ndarray::{Array1,Array2};
+use ndarray::{Array1, Array2};
+use plotters::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
-use plotters::prelude::*;
 
 // Takes a Matrix of u64 and prints its dimensions
 
-
-
 fn infer_stats(
-    histo_chunks: &Array2<u64>, 
-    n_bases_chunks: &Array1<u64>, 
-    n_records_chunks: &Array1<u64>, 
-    k: u32, 
-    chunk_i: usize, 
-    directory: &str, 
-    out_name: &str) {
-
-    // Save the plot to a file
+    histo_chunks: &Array2<u64>,
+    n_bases_chunks: &Array1<u64>,
+    n_records_chunks: &Array1<u64>,
+    k: u32,
+    chunk_i: usize,
+    directory: &str,
+    out_name: &str,
+) {
+    // Create the histogram and save it to a file file
     // Based on histogram example from https://plotters-rs.github.io/book/basic/basic_data_plotting.html
 
     let histo_64 = histo_chunks.row(chunk_i as usize).to_vec();
     let histo = histo_64.iter().map(|v| *v as i32).collect::<Vec<i32>>();
 
+    // Get the max value of the histogram
+    let hist_max = histo[2..].iter().max().unwrap();
+    let y_max = (*hist_max as f64 * 1.1) as i32;
+
     let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png");
     let file_plot_path = Path::new(&directory).join(plot_name);
-    
-    let root_area = BitMapBackend::new(&file_plot_path, (600, 400))
-    .into_drawing_area();
+
+    let root_area = BitMapBackend::new(&file_plot_path, (600, 400)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
 
     let mut ctx = ChartBuilder::on(&root_area)
         .set_label_area_size(LabelAreaPosition::Left, 40)
         .set_label_area_size(LabelAreaPosition::Bottom, 40)
-        .caption("Bar Demo", ("sans-serif", 40))
-        .build_cartesian_2d((0..10).into_segmented(), 0..50)
+        .caption("kmer histogram", ("sans-serif", 40))
+        .build_cartesian_2d((0..100).into_segmented(), 0..y_max)
         .unwrap();
 
     ctx.configure_mesh().draw().unwrap();
@@ -50,11 +51,7 @@ fn infer_stats(
         bar
     }))
     .unwrap();
-
 }
-
-
-
 
 #[inline(always)]
 fn string2kmers(seq: &str, k: u32) -> Vec<u64> {
@@ -366,8 +363,8 @@ fn main() {
                             &n_records_chunks,
                             args.k,
                             chunk_i,
-                            &directory,
-                            &out_name
+                            directory,
+                            out_name,
                         );
 
                         chunk_i += 1;
@@ -394,8 +391,6 @@ fn main() {
     println!("Time: {} ms", (stop - start).as_millis());
 
     drop(kmer_counts);
-
-
 }
 
 #[cfg(test)]
