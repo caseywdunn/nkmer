@@ -22,7 +22,7 @@ fn infer_stats(
     // Create the histogram and save it to a file file
     // Based on histogram example from https://plotters-rs.github.io/book/basic/basic_data_plotting.html
 
-    let histo_64 = histo_chunks.row(chunk_i as usize).to_vec();
+    let histo_64 = histo_chunks.row(chunk_i).to_vec();
     let histo = histo_64.iter().map(|v| *v as i32).collect::<Vec<i32>>();
 
     // Find the peaks in the histogram
@@ -113,16 +113,9 @@ fn string2kmers(seq: &str, k: u32) -> Vec<u64> {
 }
 
 fn count_histogram(kmer_counts: &HashMap<u64, u64>, histo_max: u64) -> Vec<u64> {
-    // Create a count of counts, where the key is the count and the value is the number of kmers with that count
-    let mut count_counts: HashMap<u64, u64> = HashMap::new();
-    for count in kmer_counts.values() {
-        let count_count = count_counts.entry(*count).or_insert(0);
-        *count_count += 1;
-    }
-
-    // Create a histogram of counts, where the index is the count and the value is the number of kmers with that count
+    // Create a histogram of counts
     let mut histo: Vec<u64> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-    for count in count_counts.values() {
+    for count in kmer_counts.values() {
         if *count <= histo_max {
             histo[*count as usize] += 1;
         } else {
@@ -489,23 +482,19 @@ mod tests {
             (1, 2),
             (2, 2),
             (3, 2),
-            (4, 4),
             (5, 3),
             (6, 3),
-            (7, 20),
-            (8, 1000),
+            (4, 4),
             (9, 5),
             (10, 5),
             (11, 5),
             (12, 5),
             (13, 5),
+            (7, 20),
+            (8, 1000),
         ]);
-        // 3 values occur 1 time- 4, 20, 1000
-        // 1 value occurs 2 times- 3
-        // 1 value occurs 4 times- 2
-        // 1 value occurs 5 times- 5
 
-        let histo_counts = count_histogram(&kmer_counts, 3);
-        assert_eq!(histo_counts, [0, 3, 1, 0, 2]);
+        let histo_counts = count_histogram(&kmer_counts, 10);
+        assert_eq!(histo_counts, [0, 0, 4, 2, 1, 5, 0, 0, 0, 0, 0, 2]);
     }
 }
