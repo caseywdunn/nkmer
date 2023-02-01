@@ -1,5 +1,5 @@
 use clap::Parser;
-use nalgebra::{Matrix, DMatrix, DVector};
+use ndarray::{Array1,Array2};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -11,29 +11,32 @@ use plotters::prelude::*;
 
 
 
-fn plot_histogram(histo_chunks: &Matrix<u64>, n_bases_chunks: &Matrix<u64>, n_records_chunks: &Matrix<u64>, k: u32, &directory: &str) {
-    // Create a new drawing area
-    let root = BitMapBackend::new("plot.png", (640, 480)).unwrap().into_drawing_area();
-    root.fill(&WHITE).unwrap();
-
-    // Create the x and y axis scales
-    let mut chart = ChartBuilder::on(&root)
-        .caption("Vector Plot", ("sans-serif", 20).into_font())
-        .build_cartesian_2d(-data.len() as i32..data.len() as i32, -(*data.iter().max().unwrap())..*data.iter().max().unwrap())
-        .unwrap();
-
-    // Plot the data
-    chart
-        .draw_series(data.iter().enumerate().map(|(x, y)| {
-            (x as i32, *y)
-        }))
-        .unwrap()
-        .label("Vector Plot")
-        .color(BLUE)
-        .point_style(Circle(5));
+fn infer_stats(histo_chunks: &Array2<u64>, n_bases_chunks: &Array1<u64>, n_records_chunks: &Array1<u64>, k: u32, chunk_i: u32, directory: &str, out_name: &str) {
 
     // Save the plot to a file
-    chart.save(filename).unwrap();
+    let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png");
+    let file_plot_path = Path::new(&directory).join(plot_name);
+    
+    let file = File::create(file_plot_path).unwrap();
+    let buf = std::io::BufWriter::new(file);
+
+    let mut chart = ChartBuilder::on(&buf).caption("Bar Chart of Row", ("sans-serif", 20).into_font()).x_label_area_size(30).y_label_area_size(30).build().unwrap();
+
+    let values = histo_chunks.row(chunk_i as usize).to_vec();
+    let x = (0..values.len()).collect::<Vec<_>>();
+    let y = values.to_vec();
+
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .disable_y_mesh()
+        .draw().unwrap();
+
+    chart
+        .draw_series(BarSeries::new(x.iter().zip(y.iter()), 10))
+        .unwrap();
+
+    chart.save(file_plot_path).unwrap();
 }
 
 
@@ -232,13 +235,12 @@ fn main() {
     assert!(args.histo_max > 0, "histo_max must be greater than 0");
     assert!(args.n > 0, "n must be greater than 0");
 
-    // Set up matrices and vectors for the results
-    // Matrix with one row for each cumulative subset and columns for histogram values
-    let mut histo_chunks = DMatrix::<u64>::zeros(args.n, args.histo_max as usize + 2);
+    // Create an ndarray::Array2 filled with zeros to store the histogram values
+    let mut histo_chunks = Array2::<u64>::zeros((args.n, args.histo_max as usize + 2));
 
-    // DVector with one u64 element for each cumulative subset
-    let mut n_bases_chunks = DVector::<u64>::zeros(args.n);
-    let mut n_records_chunks = DVector::<u64>::zeros(args.n);
+    // Create an ndarray::Array1 filled with zeros for bases and records
+    let mut n_bases_chunks = Array1::<u64>::zeros(args.n);
+    let mut n_records_chunks = Array1::<u64>::zeros(args.n);
 
     // Get the sequence statistics
     println!("Getting input file statistics...");
@@ -305,6 +307,11 @@ fn main() {
                         let histo = count_histogram(&kmer_counts, args.histo_max);
                         let histo_text = histogram_string(&histo);
 
+                        // Copy the values of histo into the chunk_i row of histo_chunks
+
+
+
+
                         // Copy histo into histo_chunks row
                         //let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
                         //histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
@@ -342,15 +349,15 @@ fn main() {
                         )
                         .unwrap();
 
-                        // Write the histogram plot to a file
-                        let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png", k = args.k),
-                        let file_plot_path = Path::new(directory).join(plot_name);
-                        plot_histogram(
+                        // Analyze kmers
+                        infer_stats(
                             histo_chunks,
                             n_bases_chunks,
                             n_records_chunks,
-                            k,
+                            args.k,
+                            chunk_i,
                             &directory,
+                            &out_name,
                         );
 
                         chunk_i += 1;
