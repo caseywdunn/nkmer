@@ -11,32 +11,46 @@ use plotters::prelude::*;
 
 
 
-fn infer_stats(histo_chunks: &Array2<u64>, n_bases_chunks: &Array1<u64>, n_records_chunks: &Array1<u64>, k: u32, chunk_i: u32, directory: &str, out_name: &str) {
+fn infer_stats(
+    histo_chunks: &Array2<u64>, 
+    n_bases_chunks: &Array1<u64>, 
+    n_records_chunks: &Array1<u64>, 
+    k: u32, 
+    chunk_i: usize, 
+    directory: &str, 
+    out_name: &str) {
 
     // Save the plot to a file
+    // Based on histogram example from https://plotters-rs.github.io/book/basic/basic_data_plotting.html
+
+    let histo_64 = histo_chunks.row(chunk_i as usize).to_vec();
+    let histo = histo_64.iter().map(|v| *v as i32).collect::<Vec<i32>>();
+
     let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png");
     let file_plot_path = Path::new(&directory).join(plot_name);
     
-    let file = File::create(file_plot_path).unwrap();
-    let buf = std::io::BufWriter::new(file);
+    let root_area = BitMapBackend::new(&file_plot_path, (600, 400))
+    .into_drawing_area();
+    root_area.fill(&WHITE).unwrap();
 
-    let mut chart = ChartBuilder::on(&buf).caption("Bar Chart of Row", ("sans-serif", 20).into_font()).x_label_area_size(30).y_label_area_size(30).build().unwrap();
-
-    let values = histo_chunks.row(chunk_i as usize).to_vec();
-    let x = (0..values.len()).collect::<Vec<_>>();
-    let y = values.to_vec();
-
-    chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .disable_y_mesh()
-        .draw().unwrap();
-
-    chart
-        .draw_series(BarSeries::new(x.iter().zip(y.iter()), 10))
+    let mut ctx = ChartBuilder::on(&root_area)
+        .set_label_area_size(LabelAreaPosition::Left, 40)
+        .set_label_area_size(LabelAreaPosition::Bottom, 40)
+        .caption("Bar Demo", ("sans-serif", 40))
+        .build_cartesian_2d((0..10).into_segmented(), 0..50)
         .unwrap();
 
-    chart.save(file_plot_path).unwrap();
+    ctx.configure_mesh().draw().unwrap();
+
+    ctx.draw_series((0..).zip(histo.iter()).map(|(x, y)| {
+        let x0 = SegmentValue::Exact(x);
+        let x1 = SegmentValue::Exact(x + 1);
+        let mut bar = Rectangle::new([(x0, 0), (x1, *y)], RED.filled());
+        bar.set_margin(0, 0, 5, 5);
+        bar
+    }))
+    .unwrap();
+
 }
 
 
@@ -308,15 +322,11 @@ fn main() {
                         let histo_text = histogram_string(&histo);
 
                         // Copy the values of histo into the chunk_i row of histo_chunks
+                        for (i, v) in histo.iter().enumerate() {
+                            histo_chunks[[chunk_i, i]] = *v;
+                        }
 
-
-
-
-                        // Copy histo into histo_chunks row
-                        //let histo_row = nalgebra::DVector::<u64>::from_vec(histo);
-                        //histo_chunks.row_mut(chunk_i).copy_from(&histo_row);
-                        let mut row = histo_chunks.row_mut(chunk_i);
-                        row.copy_from_slice(&histo);
+                        // Copy the values of n_bases_processed and n_records_processed into the chunk_i row of n_bases_chunks and n_records_chunks
                         n_bases_chunks[chunk_i] = n_bases_processed;
                         n_records_chunks[chunk_i] = n_records_processed;
 
@@ -351,13 +361,13 @@ fn main() {
 
                         // Analyze kmers
                         infer_stats(
-                            histo_chunks,
-                            n_bases_chunks,
-                            n_records_chunks,
+                            &histo_chunks,
+                            &n_bases_chunks,
+                            &n_records_chunks,
                             args.k,
                             chunk_i,
                             &directory,
-                            &out_name,
+                            &out_name
                         );
 
                         chunk_i += 1;

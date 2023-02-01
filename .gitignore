@@ -20,4 +20,5 @@ Cargo.lock
 # Project specific
 
 *.histo
+*.histo.png
 *.stats.tsv
