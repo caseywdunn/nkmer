@@ -1,7 +1,7 @@
 use clap::Parser;
+use find_peaks::PeakFinder;
 use ndarray::{Array1, Array2};
 use plotters::prelude::*;
-use find_peaks::PeakFinder;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -12,8 +12,8 @@ use std::path::Path;
 
 fn infer_stats(
     histo_chunks: &Array2<u64>,
-    n_bases_chunks: &Array1<u64>,
-    n_records_chunks: &Array1<u64>,
+    _n_bases_chunks: &Array1<u64>,
+    _n_records_chunks: &Array1<u64>,
     k: u32,
     chunk_i: usize,
     directory: &str,
@@ -31,7 +31,6 @@ fn infer_stats(
     peak_finder.with_min_height(10);
     let peaks = peak_finder.find_peaks();
     println!("Peaks: {:?}", peaks);
-
 
     // Get the max value of the histogram
     let hist_max = histo[2..].iter().max().unwrap();
@@ -113,9 +112,17 @@ fn string2kmers(seq: &str, k: u32) -> Vec<u64> {
     kmers
 }
 
-fn count_histogram(counts: &HashMap<u64, u64>, histo_max: u64) -> Vec<u64> {
+fn count_histogram(kmer_counts: &HashMap<u64, u64>, histo_max: u64) -> Vec<u64> {
+    // Create a count of counts, where the key is the count and the value is the number of kmers with that count
+    let mut count_counts: HashMap<u64, u64> = HashMap::new();
+    for count in kmer_counts.values() {
+        let count_count = count_counts.entry(*count).or_insert(0);
+        *count_count += 1;
+    }
+
+    // Create a histogram of counts, where the index is the count and the value is the number of kmers with that count
     let mut histo: Vec<u64> = vec![0; histo_max as usize + 2]; // +2 to allow for 0 and for >histo_max
-    for count in counts.values() {
+    for count in count_counts.values() {
         if *count <= histo_max {
             histo[*count as usize] += 1;
         } else {
@@ -473,5 +480,32 @@ mod tests {
 
         // Check that the sets are equal
         assert_eq!(kmers_f_set, kmers_r_set);
+    }
+
+    #[test]
+    fn test_count_histogram() {
+        let kmer_counts: HashMap<u64, u64> = HashMap::from([
+            (0, 2),
+            (1, 2),
+            (2, 2),
+            (3, 2),
+            (4, 4),
+            (5, 3),
+            (6, 3),
+            (7, 20),
+            (8, 1000),
+            (9, 5),
+            (10, 5),
+            (11, 5),
+            (12, 5),
+            (13, 5),
+        ]);
+        // 3 values occur 1 time- 4, 20, 1000
+        // 1 value occurs 2 times- 3
+        // 1 value occurs 4 times- 2
+        // 1 value occurs 5 times- 5
+
+        let histo_counts = count_histogram(&kmer_counts, 3);
+        assert_eq!(histo_counts, [0, 3, 1, 0, 2]);
     }
 }
