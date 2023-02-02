@@ -10,7 +10,15 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
 
-// Takes a Matrix of u64 and prints its dimensions
+// Takes a histo vector slice and counts the total number of kmers
+fn count_kmers_in_histo(histo: &[i32]) -> i32 {
+    let mut total_kmers = 0;
+    for i in 0..histo.len() {
+        total_kmers += histo[i] * i as i32;
+    }
+    total_kmers
+}
+
 
 fn infer_stats(
     histo_chunks: &Array2<u64>,
@@ -32,7 +40,32 @@ fn infer_stats(
     peak_finder.with_min_prominence(200);
     peak_finder.with_min_height(10);
     let peaks = peak_finder.find_peaks();
-    println!("Peaks: {:?}", peaks);
+    // println!("Peaks: {:?}", peaks);
+    if peaks.len() == 0 {
+        println!("Peaks: None");
+    } else if peaks.len() == 1 {
+        let peak_errors =  peaks[0].position.start;
+        println!("Peaks: Error peak only at {}", peak_errors);
+    } else if peaks.len() == 2 {
+        // Can apply manual genome size estimation per https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/
+
+        let peak_errors =  peaks[0].position.start;
+        let peak_genome =  peaks[1].position.start;
+
+        // Need to get the first trough. Can do this by taking the negative of the histogram and finding the first peak
+        let histo_inverse = histo.iter().map(|v| -v).collect::<Vec<i32>>();
+        let mut peak_finder_inverse = PeakFinder::new(&histo_inverse);
+        peak_finder_inverse.with_min_prominence(200);
+        let peaks_inverse = peak_finder_inverse.find_peaks();
+        let trough = peaks_inverse[0].position.start;
+
+        let n_kmers = count_kmers_in_histo(&histo[trough..]);
+        let genome_size = n_kmers as f64 / (peak_genome as f64);
+
+        println!("Peaks: Error peak at {}, trough at {}, genome peak at {}, genome size {} Mb", peak_errors, trough, peak_genome, genome_size as f64 / 1e6);
+    } else {
+        println!("Peaks: Multiple genome peaks found");
+    }
 
     // Get the max value of the histogram
     let hist_max = histo[2..].iter().max().unwrap();
@@ -327,16 +360,9 @@ fn main() {
                         let histo = count_histogram(&kmer_counts, args.histo_max);
                         let histo_text = histogram_string(&histo);
 
-                        // calculate histo_kmers
-                        let mut histo_kmers:u64 = 0;
-                        for (i, count) in histo.iter().enumerate() {
-                            histo_kmers += count * i as u64;
-                        }
-
-
                         println!(
-                            "Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers, {} histo_kmers.", 
-                            chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>(), histo_kmers);
+                            "Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", 
+                            chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
 
                         // Copy the values of histo into the chunk_i row of histo_chunks
                         for (i, v) in histo.iter().enumerate() {
