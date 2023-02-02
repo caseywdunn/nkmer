@@ -19,7 +19,6 @@ fn count_kmers_in_histo(histo: &[i32]) -> i32 {
     total_kmers
 }
 
-
 fn infer_stats(
     histo_chunks: &Array2<u64>,
     _n_bases_chunks: &Array1<u64>,
@@ -37,15 +36,14 @@ fn infer_stats(
 
     // Find the peaks in the histogram
     let mut peak_finder = PeakFinder::new(&histo);
-    peak_finder.with_min_prominence(200);
-    peak_finder.with_min_height(10);
+    peak_finder.with_min_prominence(1000);
     let peaks = peak_finder.find_peaks();
     // println!("Peaks: {:?}", peaks);
     if peaks.len() == 0 {
         println!("Peaks: None");
     } else if peaks.len() == 1 {
         let peak_errors =  peaks[0].position.start;
-        println!("Peaks: Error peak only at {}", peak_errors);
+        println!("Peaks: Rare peak only at {}", peak_errors);
     } else if peaks.len() == 2 {
         // Can apply manual genome size estimation per https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/
 
@@ -62,7 +60,7 @@ fn infer_stats(
         let n_kmers = count_kmers_in_histo(&histo[trough..]);
         let genome_size = n_kmers as f64 / (peak_genome as f64);
 
-        println!("Peaks: Error peak at {}, trough at {}, genome peak at {}, genome size {} Mb", peak_errors, trough, peak_genome, genome_size as f64 / 1e6);
+        println!("Peaks: Rare peak at {}, trough at {}, genome peak at {}, genome size {} Mb", peak_errors, trough, peak_genome, genome_size as f64 / 1e6);
     } else {
         println!("Peaks: Multiple genome peaks found");
     }
@@ -88,7 +86,7 @@ fn infer_stats(
 
     ctx.draw_series((0..).zip(histo.iter()).map(|(x, y)| {
         let x0 = SegmentValue::Exact(x);
-        let x1 = SegmentValue::Exact(x + 1);
+        let x1 = SegmentValue::Exact(x + 2);
         let mut bar = Rectangle::new([(x0, 0), (x1, *y)], CYAN.filled());
         bar.set_margin(0, 0, 5, 5);
         bar
