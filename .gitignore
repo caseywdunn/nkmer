@@ -23,3 +23,4 @@ Cargo.lock
 *.histo.png
 *.stats.tsv
 *output/*
+*.gz

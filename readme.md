@@ -60,4 +60,4 @@ Some common tasks in development:
 
 ### Test data
 
-This repository includes a test [dataset from Thermus thermophilus](https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR5324768&display=metadata) to develop against.
+For explroeing, testing, and debugging this tool, download the this set of  [E. coli genome reads](https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR23291413&display=download) as a fastq and place it in a `data/` folder in the root of this repo.

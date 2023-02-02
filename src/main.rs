@@ -48,7 +48,7 @@ fn infer_stats(
         .set_label_area_size(LabelAreaPosition::Left, 40)
         .set_label_area_size(LabelAreaPosition::Bottom, 40)
         .caption("kmer histogram", ("sans-serif", 40))
-        .build_cartesian_2d((0..100).into_segmented(), 0..y_max)
+        .build_cartesian_2d((0..50).into_segmented(), 0..y_max)
         .unwrap();
 
     ctx.configure_mesh().draw().unwrap();
@@ -311,12 +311,12 @@ fn main() {
             let block_reader = BufReader::new(gz);
             for line in block_reader.lines() {
                 if line_n % 4 == 1 {
-                    let line = line.unwrap();
+                    let line_text = line.unwrap();
                     n_records_processed += 1;
-                    n_bases_processed += line.len() as u64;
+                    n_bases_processed += line_text.len() as u64;
 
                     // Count the kmers
-                    let kmers = string2kmers(&line, args.k);
+                    let kmers = string2kmers(&line_text, args.k);
                     for kmer in kmers {
                         let count = kmer_counts.entry(kmer).or_insert(0);
                         *count += 1;
@@ -324,12 +324,19 @@ fn main() {
 
                     // If we've processed enough records, write the output
                     if (n_records_processed % chunk_size == 0) & (n_records_processed > 0) {
-                        println!(
-                            "Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers.", 
-                            chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>());
-
                         let histo = count_histogram(&kmer_counts, args.histo_max);
                         let histo_text = histogram_string(&histo);
+
+                        // calculate histo_kmers
+                        let mut histo_kmers:u64 = 0;
+                        for (i, count) in histo.iter().enumerate() {
+                            histo_kmers += count * i as u64;
+                        }
+
+
+                        println!(
+                            "Cumulative chunk {} stats: {} reads, {} bases, {} unique kmers, {} kmers, {} histo_kmers.", 
+                            chunk_i, n_records_processed, n_bases_processed, kmer_counts.len(), kmer_counts.values().sum::<u64>(), histo_kmers);
 
                         // Copy the values of histo into the chunk_i row of histo_chunks
                         for (i, v) in histo.iter().enumerate() {
