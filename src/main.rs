@@ -13,8 +13,8 @@ use std::path::Path;
 // Takes a histo vector slice and counts the total number of kmers
 fn count_kmers_in_histo(histo: &[i32]) -> i32 {
     let mut total_kmers = 0;
-    for i in 0..histo.len() {
-        total_kmers += histo[i] * i as i32;
+    for (i, count) in histo.iter().enumerate() {
+        total_kmers += count * i as i32;
     }
     total_kmers
 }
@@ -39,16 +39,16 @@ fn infer_stats(
     peak_finder.with_min_prominence(1000);
     let peaks = peak_finder.find_peaks();
     // println!("Peaks: {:?}", peaks);
-    if peaks.len() == 0 {
+    if peaks.is_empty() {
         println!("Peaks: None");
     } else if peaks.len() == 1 {
-        let peak_errors =  peaks[0].position.start;
+        let peak_errors = peaks[0].position.start;
         println!("Peaks: Rare peak only at {}", peak_errors);
     } else if peaks.len() == 2 {
         // Can apply manual genome size estimation per https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/
 
-        let peak_errors =  peaks[0].position.start;
-        let peak_genome =  peaks[1].position.start;
+        let peak_errors = peaks[0].position.start;
+        let peak_genome = peaks[1].position.start;
 
         // Need to get the first trough. Can do this by taking the negative of the histogram and finding the first peak
         let histo_inverse = histo.iter().map(|v| -v).collect::<Vec<i32>>();
@@ -60,7 +60,13 @@ fn infer_stats(
         let n_kmers = count_kmers_in_histo(&histo[trough..]);
         let genome_size = n_kmers as f64 / (peak_genome as f64);
 
-        println!("Peaks: Rare peak at {}, trough at {}, genome peak at {}, genome size {} Mb", peak_errors, trough, peak_genome, genome_size as f64 / 1e6);
+        println!(
+            "Peaks: Rare peak at {}, trough at {}, genome peak at {}, genome size {} Mb",
+            peak_errors,
+            trough,
+            peak_genome,
+            genome_size / 1e6
+        );
     } else {
         println!("Peaks: Multiple genome peaks found");
     }
