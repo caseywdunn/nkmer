@@ -10,7 +10,7 @@ Then, in this repo build the binary:
 
     cargo build --release
 
-The executable is then at `target/debug/nkmer`
+The executable is then at `target/release/nkmer`
 
 ## Usage
 

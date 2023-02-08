@@ -38,7 +38,12 @@ fn infer_stats(
     let mut peak_finder = PeakFinder::new(&histo);
     peak_finder.with_min_prominence(1000);
     let peaks = peak_finder.find_peaks();
-    // println!("Peaks: {:?}", peaks);
+
+    // Determine the x_max of the plot based on peak location
+    // Set the xmax
+    let x_max = 50;
+
+    // Run analyses depending on the number of peaks found
     if peaks.is_empty() {
         println!("Peaks: None");
     } else if peaks.len() == 1 {
@@ -71,10 +76,11 @@ fn infer_stats(
         println!("Peaks: Multiple genome peaks found");
     }
 
-    // Get the max value of the histogram
+    // Get the max value in the histogram
     let hist_max = histo[2..].iter().max().unwrap();
     let y_max = (*hist_max as f64 * 1.1) as i32;
-
+    
+    // Plot the histogram
     let plot_name = &format!("{out_name}_k{k}_part{chunk_i}.histo.png");
     let file_plot_path = Path::new(&directory).join(plot_name);
 
@@ -85,7 +91,7 @@ fn infer_stats(
         .set_label_area_size(LabelAreaPosition::Left, 40)
         .set_label_area_size(LabelAreaPosition::Bottom, 40)
         .caption("kmer histogram", ("sans-serif", 40))
-        .build_cartesian_2d((0..50).into_segmented(), 0..y_max)
+        .build_cartesian_2d((0..x_max).into_segmented(), 0..y_max)
         .unwrap();
 
     ctx.configure_mesh().draw().unwrap();
