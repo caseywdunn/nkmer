@@ -106,6 +106,43 @@ fn infer_stats(
     .unwrap();
 }
 
+
+fn ints2kmers(read: &Vec<u8>, k: u32) -> Vec<u64>{
+    // Create a mask that has 1s in the last 2*k bits
+    let mask: u64 = (1 << (2 * k)) - 1;
+    let mut kmers: Vec<u64> = Vec::new();
+    let mut frame: u64 = 0; // read the bits for each base into the least significant end of this integer
+    let mut revframe: u64 = 0; // read the bits for complement into the least significant end of this integer
+    let mut n_valid = 0; // number of valid bases in the frame
+
+
+    for byte in read {
+        for i in [6,4,2,0]{
+            let base = (byte >> i) & 3;
+            frame = (frame << 2) | base as u64;
+
+            revframe = (revframe >> 2) | ((3 - base as u64) << (2 * (k - 1)));
+
+            n_valid += 1;
+            if n_valid >= k {
+                let forward = frame & mask;
+                let reverse = revframe & mask;
+
+                if forward < reverse {
+                    kmers.push(forward);
+                } else {
+                    kmers.push(reverse);
+                }
+            }
+        }
+    }
+
+    kmers
+
+
+}
+
+
 #[inline(always)]
 fn string2kmers(seq: &str, k: u32) -> Vec<u64> {
     // kmers are encoded as u64, with two bits per base
@@ -178,6 +215,31 @@ fn histogram_string(histo: &[u64]) -> String {
         }
     }
     s
+}
+
+// For new, just return everything before an N. But in the future may return
+// a vector of itneger encoded sequences that were separated by N.
+fn seq_to_ints(seq:&String) -> Vec<Vec<u8>> {
+    let mut ints: Vec<u8> = Vec::new();
+    let mut frame: u8 = 0;
+    for (i,c) in seq.chars().enumerate() {
+        let base = match c {
+            'A' => 0,
+            'C' => 1,
+            'G' => 2,
+            'T' => 3,
+            'N' => 4,
+            _ => 5,
+        };
+        if base > 3{
+            break;
+        }
+        frame = (frame << 2) | base;
+        if (i % 4 == 0) & (i>0) {
+            ints.push(frame);
+        }
+    }
+    vec![ints]
 }
 
 fn get_fastq_stats(input_files: &Vec<String>, max_reads: u64) -> (u64, u64) {
@@ -296,7 +358,7 @@ fn main() {
         "k must be less than 32 due to use of 64 bit integers to encode kmers"
     );
     assert!(args.k > 0, "k must be greater than 0");
-    assert!(args.k % 2 == 1, "k must be odd");
+    //assert!(args.k % 2 == 1, "k must be odd");
     assert!(args.histo_max > 0, "histo_max must be greater than 0");
     assert!(args.n > 0, "n must be greater than 0");
 
@@ -328,6 +390,12 @@ fn main() {
     let mut kmer_counts: HashMap<u64, u64> = HashMap::new();
     let start = std::time::Instant::now();
     let mut chunk_i = 0;
+
+    // Create a vector of vector of u8 to hold sequence data
+    let mut reads: Vec<Vec<u8>> = Vec::new();
+
+
+
     'processing_files: for file_name in args.input {
         let path = Path::new(&file_name);
         let file = File::open(path).expect("Ooops.");
@@ -358,11 +426,92 @@ fn main() {
                     n_records_processed += 1;
                     n_bases_processed += line_text.len() as u64;
 
-                    // Count the kmers
+                    let mut seqints = seq_to_ints(&line_text);
+
+                    // append the contents of seqints to reads
+                    reads.append(&mut seqints);
+                }
+                    
+                line_n += 1;
+            }
+        }
+    }
+
+    println!(
+        "Total processed: records {}, bases {}",
+        n_records_processed, n_bases_processed
+    );
+
+    let mut nbytes = 0;
+    for read in reads.iter_mut(){
+        nbytes += read.len();
+    }
+
+    println!("Total encoded: records {}, bases {}", reads.len(), nbytes*4);
+
+    let stop = std::time::Instant::now();
+    println!("Time: {} ms", (stop - start).as_millis());
+
+    println!("Finding 16mers");
+
+    // Create an array of length 2^32 of elements u16 to hold count of all possible 16mers
+    // The index is the kmer
+    let mut counts_16mers: Vec<u16> = vec![0; 4_294_967_296];
+
+    for read in reads.iter_mut(){
+        let kmers = ints2kmers(&read, 16);
+        for kmer in kmers {
+            counts_16mers[kmer as usize] = counts_16mers[kmer as usize]+1;
+        }
+    }
+
+    println!("16mer summary:");
+    let mut histo16: HashMap<u16, u32> = HashMap::new();
+    let mut sixteenmers: Vec<u32> = Vec::new();
+    let mut i: u32 = 0;
+    for c in counts_16mers {
+        let count = histo16.entry(c).or_insert(0);
+        *count += 1;
+
+        if c > 1 {
+            sixteenmers.push(i);
+        }
+
+        if i % 100_000_000 == 0 {
+            println!("  {} 16mers processed", i);
+        }
+
+        i += 1;
+    }
+
+    println!("  0: {}", histo16.get(&0).unwrap());
+    println!("  1: {}", histo16.get(&1).unwrap());
+    println!("  2: {}", histo16.get(&2).unwrap());
+    println!("  3: {}", histo16.get(&3).unwrap());
+    println!("  4: {}", histo16.get(&4).unwrap());
+    println!("  5: {}", histo16.get(&5).unwrap());
+    println!("  6: {}", histo16.get(&6).unwrap());
+    println!("  7: {}", histo16.get(&7).unwrap());
+    println!("  8: {}", histo16.get(&8).unwrap());
+    println!("  9: {}", histo16.get(&9).unwrap());
+    println!("  10: {}", histo16.get(&10).unwrap());
+
+    println!("  Number of 16mers: {}", sixteenmers.len());
+
+    
+
+    /*
+
+    drop(kmer_counts);
+    
+    // Count the kmers
                     let kmers = string2kmers(&line_text, args.k);
                     for kmer in kmers {
                         let count = kmer_counts.entry(kmer).or_insert(0);
                         *count += 1;
+
+                        let k16 = kmer as usize;
+                        counts_16mers[k16] = counts_16mers[k16] + 1;
                     }
 
                     // If we've processed enough records, write the output
@@ -434,19 +583,42 @@ fn main() {
                         break 'processing_files;
                     }
                 }
-                line_n += 1;
-            }
+     */
+
+    /*
+    // summarize 16mers
+    println!("16mer summary:");
+    let mut histo16: HashMap<u16, u32> = HashMap::new();
+    let mut sixteenmers: Vec<u32> = Vec::new();
+    let mut i: u32 = 0;
+    for c in counts_16mers {
+        let count = histo16.entry(c).or_insert(0);
+        *count += 1;
+
+        if c > 1 {
+            sixteenmers.push(i);
         }
+
+        if i % 100_000_000 == 0 {
+            println!("  {} 16mers processed", i);
+        }
+
+        i += 1;
     }
 
-    println!(
-        "Total processed: records {}, bases {}",
-        n_records_processed, n_bases_processed
-    );
-    let stop = std::time::Instant::now();
-    println!("Time: {} ms", (stop - start).as_millis());
+    println!("  0: {}", histo16.get(&0).unwrap());
+    println!("  1: {}", histo16.get(&1).unwrap());
+    println!("  2: {}", histo16.get(&2).unwrap());
+    println!("  3: {}", histo16.get(&3).unwrap());
+    println!("  4: {}", histo16.get(&4).unwrap());
+    println!("  5: {}", histo16.get(&5).unwrap());
+    println!("  6: {}", histo16.get(&6).unwrap());
+    println!("  7: {}", histo16.get(&7).unwrap());
+    println!("  8: {}", histo16.get(&8).unwrap());
+    println!("  9: {}", histo16.get(&9).unwrap());
+    println!("  10: {}", histo16.get(&10).unwrap());
 
-    drop(kmer_counts);
+    println!("  Number of 16mers: {}", sixteenmers.len());
 
     // Write histo_chunks to a file
     let histo_file_name = &format!("{out_name}_k{k}_histo.csv", k = args.k);
@@ -457,6 +629,7 @@ fn main() {
         let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
         writer.serialize_array2(&histo_chunks).unwrap();
     }
+    */
 }
 
 #[cfg(test)]
